@@ -1,7 +1,7 @@
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
+import { useProjectStore } from '@/stores/projectStore';
 import {
-  LayoutDashboard,
   KanbanSquare,
   Activity,
   Bot,
@@ -9,6 +9,9 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  Users,
+  FolderKanban,
+  ArrowLeft,
 } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -16,24 +19,29 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 
-const navItems = [
-  { path: '/', icon: KanbanSquare, label: 'Board' },
-  { path: '/activity', icon: Activity, label: 'AI Activity' },
-  { path: '/decisions', icon: Bot, label: 'AI Decisions' },
-  { path: '/settings', icon: Settings, label: 'Settings' },
-];
-
 export function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  const { projectId } = useParams<{ projectId: string }>();
   const { user, signOut } = useAuthStore();
+  const { currentProject } = useProjectStore();
 
   const initials = user?.user_metadata?.full_name
     ?.split(' ')
     .map((n: string) => n[0])
     .join('')
     .toUpperCase() || user?.email?.[0]?.toUpperCase() || '?';
+
+  const projectNav = projectId
+    ? [
+        { path: `/projects/${projectId}/board`, icon: KanbanSquare, label: 'Board' },
+        { path: `/projects/${projectId}/activity`, icon: Activity, label: 'AI Activity' },
+        { path: `/projects/${projectId}/decisions`, icon: Bot, label: 'AI Decisions' },
+        { path: `/projects/${projectId}/team`, icon: Users, label: 'Team' },
+        { path: `/projects/${projectId}/settings`, icon: Settings, label: 'Settings' },
+      ]
+    : [];
 
   return (
     <aside
@@ -52,9 +60,38 @@ export function AppSidebar() {
         )}
       </div>
 
+      {/* Back to Projects */}
+      {projectId && (
+        <button
+          onClick={() => navigate('/projects')}
+          className="flex items-center gap-2 border-b border-sidebar-border px-4 py-2.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="h-3.5 w-3.5 shrink-0" />
+          {!collapsed && (
+            <span className="truncate">
+              {currentProject?.name || 'All Projects'}
+            </span>
+          )}
+        </button>
+      )}
+
       {/* Nav */}
       <nav className="flex-1 space-y-1 p-2">
-        {navItems.map((item) => {
+        {!projectId && (
+          <button
+            onClick={() => navigate('/projects')}
+            className={cn(
+              'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+              location.pathname === '/projects'
+                ? 'bg-primary/10 text-primary'
+                : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+            )}
+          >
+            <FolderKanban className="h-4 w-4 shrink-0" />
+            {!collapsed && <span>Projects</span>}
+          </button>
+        )}
+        {projectNav.map((item) => {
           const isActive = location.pathname === item.path;
           return (
             <button
