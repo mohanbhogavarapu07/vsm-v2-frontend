@@ -68,9 +68,42 @@ export const api = {
     return apiRequest<any[]>(`/api/events${query}`);
   },
 
-  // Organizations
+// Organizations
   getOrganization: () => apiRequest<any>('/api/organization'),
 
   // Users
   getUsers: () => apiRequest<any[]>('/api/users'),
+
+  // Projects
+  getProjects: () => apiRequest<any[]>('/api/projects'),
+  getProject: (id: string) => apiRequest<any>(`/api/projects/${id}`),
+  createProject: (data: { name: string; description?: string; key?: string }) =>
+    apiRequest<any>('/api/projects', { method: 'POST', body: JSON.stringify(data) }),
+  updateProject: (id: string, data: any) =>
+    apiRequest<any>(`/api/projects/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteProject: (id: string) =>
+    apiRequest<any>(`/api/projects/${id}`, { method: 'DELETE' }),
+
+  // Roles
+  getProjectRoles: (projectId: string) =>
+    apiRequest<any[]>(`/api/projects/${projectId}/roles`),
+  createRole: (projectId: string, data: { name: string; description?: string; permissions: string[] }) =>
+    apiRequest<any>(`/api/projects/${projectId}/roles`, { method: 'POST', body: JSON.stringify(data) }),
+  updateRole: (projectId: string, roleId: string, data: any) =>
+    apiRequest<any>(`/api/projects/${projectId}/roles/${roleId}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteRole: (projectId: string, roleId: string) =>
+    apiRequest<any>(`/api/projects/${projectId}/roles/${roleId}`, { method: 'DELETE' }),
+
+  // Team Members
+  getProjectMembers: (projectId: string) =>
+    apiRequest<any[]>(`/api/projects/${projectId}/members`),
+  inviteMember: (projectId: string, data: { email: string; role_id: string }) =>
+    apiRequest<any>(`/api/projects/${projectId}/members/invite`, { method: 'POST', body: JSON.stringify(data) }),
+  updateMemberRole: (projectId: string, memberId: string, roleId: string) =>
+    apiRequest<any>(`/api/projects/${projectId}/members/${memberId}`, { method: 'PATCH', body: JSON.stringify({ role_id: roleId }) }),
+  removeMember: (projectId: string, memberId: string) =>
+    apiRequest<any>(`/api/projects/${projectId}/members/${memberId}`, { method: 'DELETE' }),
+
+  // Permissions (predefined list)
+  getPermissions: () => apiRequest<any[]>('/api/permissions'),
 };

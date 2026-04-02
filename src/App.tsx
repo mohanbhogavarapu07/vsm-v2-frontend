@@ -11,6 +11,9 @@ import Index from './pages/Index';
 import ActivityPage from './pages/ActivityPage';
 import DecisionsPage from './pages/DecisionsPage';
 import SettingsPage from './pages/SettingsPage';
+import ProjectsPage from './pages/ProjectsPage';
+import ProjectSetupPage from './pages/ProjectSetupPage';
+import TeamPage from './pages/TeamPage';
 import ResetPassword from './pages/ResetPassword';
 import NotFound from './pages/NotFound';
 import { Loader2 } from 'lucide-react';
@@ -52,10 +55,16 @@ const App = () => (
             element={
               <AuthGate>
                 <Routes>
+                  {/* Project Selection */}
+                  <Route path="/" element={<Navigate to="/projects" replace />} />
                   <Route element={<AppLayout />}>
-                    <Route path="/" element={<Index />} />
-                    <Route path="/activity" element={<ActivityPage />} />
-                    <Route path="/decisions" element={<DecisionsPage />} />
+                    <Route path="/projects" element={<ProjectsPage />} />
+                    <Route path="/projects/:projectId/setup" element={<ProjectSetupPage />} />
+                    <Route path="/projects/:projectId/board" element={<Index />} />
+                    <Route path="/projects/:projectId/activity" element={<ActivityPage />} />
+                    <Route path="/projects/:projectId/decisions" element={<DecisionsPage />} />
+                    <Route path="/projects/:projectId/team" element={<TeamPage />} />
+                    <Route path="/projects/:projectId/settings" element={<SettingsPage />} />
                     <Route path="/settings" element={<SettingsPage />} />
                   </Route>
                   <Route path="*" element={<NotFound />} />
