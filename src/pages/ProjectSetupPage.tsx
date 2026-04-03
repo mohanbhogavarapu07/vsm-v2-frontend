@@ -1,13 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useProjectStore, PREDEFINED_PERMISSIONS, Role } from '@/stores/projectStore';
+import { useProjectStore, ACCESS_LEVELS, Role, AccessLevel, WorkflowStage } from '@/stores/projectStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
 import {
   Select,
@@ -16,41 +14,49 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
+  ArrowRight,
   Check,
   ChevronRight,
+  FolderKanban,
+  GitBranch,
+  GripVertical,
   Loader2,
+  Mail,
   Plus,
   Shield,
-  ShieldCheck,
   Trash2,
   UserPlus,
   Users,
+  Workflow,
   X,
-  Pencil,
-  Mail,
-  ArrowRight,
-  FolderKanban,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
 
 const STEPS = [
-  { id: 'roles', label: 'Define Roles', icon: Shield, description: 'Create custom roles for your team' },
-  { id: 'permissions', label: 'Set Permissions', icon: ShieldCheck, description: 'Assign permissions to each role' },
+  { id: 'roles', label: 'Define Roles', icon: Shield, description: 'Create roles & assign access levels' },
+  { id: 'workflow', label: 'Define Workflow', icon: Workflow, description: 'Set up task lifecycle stages' },
   { id: 'invite', label: 'Invite Team', icon: UserPlus, description: 'Invite members and assign roles' },
 ] as const;
 
 type StepId = typeof STEPS[number]['id'];
+
+const WORKFLOW_PRESETS = [
+  {
+    name: 'Standard Scrum',
+    stages: ['Backlog', 'To Do', 'In Progress', 'Code Review', 'Testing', 'Done'],
+  },
+  {
+    name: 'Simple Kanban',
+    stages: ['To Do', 'In Progress', 'Done'],
+  },
+  {
+    name: 'Full Pipeline',
+    stages: ['Backlog', 'Development', 'Code Review', 'QA', 'UAT', 'Deployment', 'Done'],
+  },
+];
 
 export default function ProjectSetupPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -59,31 +65,42 @@ export default function ProjectSetupPage() {
     currentProject,
     roles,
     members,
+    workflowStages,
     loading,
     error,
     fetchRoles,
     createRole,
-    updateRole,
     deleteRole,
+    updateRole,
     fetchMembers,
     inviteMember,
+    fetchWorkflowStages,
+    createWorkflowStage,
+    deleteWorkflowStage,
     setCurrentProject,
   } = useProjectStore();
 
   const [activeStep, setActiveStep] = useState<StepId>('roles');
   const [newRoleName, setNewRoleName] = useState('');
   const [newRoleDesc, setNewRoleDesc] = useState('');
-  const [editingRole, setEditingRole] = useState<Role | null>(null);
+  const [newRoleAccess, setNewRoleAccess] = useState<AccessLevel>('LOW');
+  const [creatingRole, setCreatingRole] = useState(false);
+  const [showAddRole, setShowAddRole] = useState(false);
+
+  // Workflow state
+  const [newStageName, setNewStageName] = useState('');
+  const [creatingStage, setCreatingStage] = useState(false);
+
+  // Invite state
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRoleId, setInviteRoleId] = useState('');
   const [inviting, setInviting] = useState(false);
-  const [creatingRole, setCreatingRole] = useState(false);
-  const [showAddRole, setShowAddRole] = useState(false);
 
   useEffect(() => {
     if (projectId) {
       fetchRoles(projectId);
       fetchMembers(projectId);
+      fetchWorkflowStages(projectId);
       if (!currentProject) {
         api.getProject(projectId).then((p) => setCurrentProject(p)).catch(() => {});
       }
@@ -99,25 +116,47 @@ export default function ProjectSetupPage() {
       await createRole(projectId, {
         name: newRoleName.trim(),
         description: newRoleDesc.trim() || undefined,
-        permissions: ['read'], // default permission
+        access_level: newRoleAccess,
       });
       setNewRoleName('');
       setNewRoleDesc('');
+      setNewRoleAccess('LOW');
       setShowAddRole(false);
-    } catch {
-      // handled
-    } finally {
+    } catch {} finally {
       setCreatingRole(false);
     }
   };
 
-  const handleTogglePermission = async (role: Role, permKey: string) => {
+  const handleAddStage = async () => {
+    if (!newStageName.trim() || !projectId) return;
+    setCreatingStage(true);
+    try {
+      const nextOrder = workflowStages.length;
+      await createWorkflowStage(projectId, {
+        name: newStageName.trim(),
+        stage_order: nextOrder,
+        is_terminal: false,
+      });
+      setNewStageName('');
+    } catch {} finally {
+      setCreatingStage(false);
+    }
+  };
+
+  const handleApplyPreset = async (stages: string[]) => {
     if (!projectId) return;
-    const current = role.permissions || [];
-    const updated = current.includes(permKey)
-      ? current.filter((p) => p !== permKey)
-      : [...current, permKey];
-    await updateRole(projectId, role.id, { permissions: updated });
+    // Delete existing stages first
+    for (const s of workflowStages) {
+      await deleteWorkflowStage(projectId, s.id);
+    }
+    // Create new stages
+    for (let i = 0; i < stages.length; i++) {
+      await createWorkflowStage(projectId, {
+        name: stages[i],
+        stage_order: i,
+        is_terminal: i === stages.length - 1,
+      });
+    }
   };
 
   const handleInvite = async () => {
@@ -127,9 +166,7 @@ export default function ProjectSetupPage() {
       await inviteMember(projectId, inviteEmail.trim(), inviteRoleId);
       setInviteEmail('');
       setInviteRoleId('');
-    } catch {
-      // handled
-    } finally {
+    } catch {} finally {
       setInviting(false);
     }
   };
@@ -145,7 +182,20 @@ export default function ProjectSetupPage() {
   };
 
   const canProceedFromRoles = roles.length > 0;
-  const canProceedFromPermissions = roles.every((r) => r.permissions && r.permissions.length > 0);
+  const canProceedFromWorkflow = workflowStages.length >= 2;
+
+  const getAccessBadge = (level: AccessLevel) => {
+    const info = ACCESS_LEVELS.find((a) => a.value === level);
+    const colorClass =
+      level === 'HIGH' ? 'border-destructive/30 text-destructive bg-destructive/10' :
+      level === 'MEDIUM' ? 'border-warning/30 text-warning bg-warning/10' :
+      'border-muted-foreground/30 text-muted-foreground bg-muted';
+    return (
+      <Badge variant="outline" className={cn('text-xs', colorClass)}>
+        {info?.label || level}
+      </Badge>
+    );
+  };
 
   return (
     <div className="mx-auto max-w-4xl p-6 lg:p-8">
@@ -155,11 +205,11 @@ export default function ProjectSetupPage() {
           <FolderKanban className="h-4 w-4" />
           <span>{currentProject?.name || 'Project'}</span>
           <ChevronRight className="h-3 w-3" />
-          <span>Team Setup</span>
+          <span>Setup</span>
         </div>
-        <h1 className="text-2xl font-bold text-foreground">Set Up Your Team</h1>
+        <h1 className="text-2xl font-bold text-foreground">Set Up Your Project</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Define roles, assign permissions, and invite your team members
+          Define roles, configure your workflow, and invite your team
         </p>
       </div>
 
@@ -172,9 +222,7 @@ export default function ProjectSetupPage() {
             return (
               <div key={step.id} className="flex items-center gap-2 flex-1">
                 <button
-                  onClick={() => {
-                    if (isCompleted || isActive) setActiveStep(step.id);
-                  }}
+                  onClick={() => { if (isCompleted || isActive) setActiveStep(step.id); }}
                   className={cn(
                     'flex items-center gap-3 rounded-lg border p-3 transition-all w-full',
                     isActive
@@ -187,10 +235,8 @@ export default function ProjectSetupPage() {
                   <div
                     className={cn(
                       'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-medium',
-                      isActive
-                        ? 'bg-primary text-primary-foreground'
-                        : isCompleted
-                        ? 'bg-success text-success-foreground'
+                      isActive ? 'bg-primary text-primary-foreground'
+                        : isCompleted ? 'bg-success text-success-foreground'
                         : 'bg-muted text-muted-foreground'
                     )}
                   >
@@ -218,8 +264,8 @@ export default function ProjectSetupPage() {
         </div>
       )}
 
-      {/* Step Content */}
       <AnimatePresence mode="wait">
+        {/* STEP 1: ROLES */}
         {activeStep === 'roles' && (
           <motion.div
             key="roles"
@@ -237,7 +283,7 @@ export default function ProjectSetupPage() {
                       Define Team Roles
                     </CardTitle>
                     <CardDescription>
-                      Create custom roles for your project. Each role will have specific permissions.
+                      Create custom roles and assign an access level to each. Access levels control what users can do.
                     </CardDescription>
                   </div>
                   <Button size="sm" onClick={() => setShowAddRole(true)}>
@@ -247,11 +293,24 @@ export default function ProjectSetupPage() {
                 </div>
               </CardHeader>
               <CardContent>
+                {/* Access Level Legend */}
+                <div className="mb-6 rounded-lg border bg-muted/30 p-4">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Access Levels</p>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {ACCESS_LEVELS.map((level) => (
+                      <div key={level.value} className="flex items-start gap-2">
+                        {getAccessBadge(level.value)}
+                        <p className="text-xs text-muted-foreground">{level.description}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 {roles.length === 0 && !showAddRole ? (
                   <div className="flex flex-col items-center py-10 text-center">
                     <Shield className="h-12 w-12 text-muted-foreground/30 mb-3" />
                     <p className="text-sm text-muted-foreground">
-                      No roles defined yet. Start by adding roles like Product Owner, Developer, QA, etc.
+                      No roles defined yet. Create roles like Product Owner, Developer, QA, etc.
                     </p>
                     <Button variant="outline" className="mt-4" onClick={() => setShowAddRole(true)}>
                       <Plus className="mr-1.5 h-4 w-4" />
@@ -281,11 +340,22 @@ export default function ProjectSetupPage() {
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            {role.permissions && role.permissions.length > 0 && (
-                              <Badge variant="secondary" className="text-xs">
-                                {role.permissions.length} permission{role.permissions.length !== 1 ? 's' : ''}
-                              </Badge>
-                            )}
+                            {getAccessBadge(role.access_level)}
+                            <Select
+                              value={role.access_level}
+                              onValueChange={(val) => projectId && updateRole(projectId, role.id, { access_level: val as AccessLevel })}
+                            >
+                              <SelectTrigger className="w-32 h-8 text-xs">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {ACCESS_LEVELS.map((lvl) => (
+                                  <SelectItem key={lvl.value} value={lvl.value}>
+                                    {lvl.label} — {lvl.value}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
                             <Button
                               variant="ghost"
                               size="icon"
@@ -306,22 +376,39 @@ export default function ProjectSetupPage() {
                         className="rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 p-4"
                       >
                         <div className="space-y-3">
-                          <div className="space-y-1.5">
-                            <Label>Role Name</Label>
-                            <Input
-                              placeholder="e.g. Product Owner, Developer, QA..."
-                              value={newRoleName}
-                              onChange={(e) => setNewRoleName(e.target.value)}
-                              autoFocus
-                            />
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label>Description (optional)</Label>
-                            <Input
-                              placeholder="Brief description of this role's responsibility"
-                              value={newRoleDesc}
-                              onChange={(e) => setNewRoleDesc(e.target.value)}
-                            />
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="space-y-1.5">
+                              <Label>Role Name</Label>
+                              <Input
+                                placeholder="e.g. Developer, QA..."
+                                value={newRoleName}
+                                onChange={(e) => setNewRoleName(e.target.value)}
+                                autoFocus
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label>Description</Label>
+                              <Input
+                                placeholder="Optional description"
+                                value={newRoleDesc}
+                                onChange={(e) => setNewRoleDesc(e.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label>Access Level</Label>
+                              <Select value={newRoleAccess} onValueChange={(v) => setNewRoleAccess(v as AccessLevel)}>
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {ACCESS_LEVELS.map((lvl) => (
+                                    <SelectItem key={lvl.value} value={lvl.value}>
+                                      {lvl.label} ({lvl.value})
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
                           </div>
                           <div className="flex gap-2">
                             <Button size="sm" onClick={handleAddRole} disabled={!newRoleName.trim() || creatingRole}>
@@ -331,11 +418,7 @@ export default function ProjectSetupPage() {
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() => {
-                                setShowAddRole(false);
-                                setNewRoleName('');
-                                setNewRoleDesc('');
-                              }}
+                              onClick={() => { setShowAddRole(false); setNewRoleName(''); setNewRoleDesc(''); }}
                             >
                               Cancel
                             </Button>
@@ -349,17 +432,18 @@ export default function ProjectSetupPage() {
             </Card>
 
             <div className="flex justify-end">
-              <Button onClick={() => setActiveStep('permissions')} disabled={!canProceedFromRoles}>
-                Continue to Permissions
+              <Button onClick={() => setActiveStep('workflow')} disabled={!canProceedFromRoles}>
+                Continue to Workflow
                 <ChevronRight className="ml-1.5 h-4 w-4" />
               </Button>
             </div>
           </motion.div>
         )}
 
-        {activeStep === 'permissions' && (
+        {/* STEP 2: WORKFLOW */}
+        {activeStep === 'workflow' && (
           <motion.div
-            key="permissions"
+            key="workflow"
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
@@ -368,54 +452,102 @@ export default function ProjectSetupPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <ShieldCheck className="h-5 w-5 text-primary" />
-                  Assign Permissions
+                  <Workflow className="h-5 w-5 text-primary" />
+                  Define Workflow Stages
                 </CardTitle>
                 <CardDescription>
-                  Configure what each role can do. Check the permissions you want to grant to each role.
+                  Define the task lifecycle for your project. The AI agent will use these stages to automatically transition tasks.
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b">
-                        <th className="py-3 pr-4 text-left font-medium text-muted-foreground min-w-[180px]">
-                          Permission
-                        </th>
-                        {roles.map((role) => (
-                          <th key={role.id} className="px-3 py-3 text-center font-medium text-foreground min-w-[100px]">
-                            <div className="flex flex-col items-center gap-1">
-                              <Shield className="h-4 w-4 text-primary" />
-                              <span className="text-xs">{role.name}</span>
-                            </div>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {PREDEFINED_PERMISSIONS.map((perm) => (
-                        <tr key={perm.key} className="border-b border-border/50 hover:bg-muted/30">
-                          <td className="py-3 pr-4">
-                            <div>
-                              <p className="font-medium text-foreground">{perm.label}</p>
-                              <p className="text-xs text-muted-foreground">{perm.description}</p>
-                            </div>
-                          </td>
-                          {roles.map((role) => (
-                            <td key={role.id} className="px-3 py-3 text-center">
-                              <div className="flex justify-center">
-                                <Checkbox
-                                  checked={role.permissions?.includes(perm.key)}
-                                  onCheckedChange={() => handleTogglePermission(role, perm.key)}
-                                />
-                              </div>
-                            </td>
-                          ))}
-                        </tr>
+              <CardContent className="space-y-6">
+                {/* Presets */}
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Quick Presets</p>
+                  <div className="flex flex-wrap gap-2">
+                    {WORKFLOW_PRESETS.map((preset) => (
+                      <Button
+                        key={preset.name}
+                        variant="outline"
+                        size="sm"
+                        className="text-xs"
+                        onClick={() => handleApplyPreset(preset.stages)}
+                      >
+                        <GitBranch className="mr-1.5 h-3 w-3" />
+                        {preset.name}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Stage List */}
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+                    Workflow Pipeline ({workflowStages.length} stages)
+                  </p>
+                  {workflowStages.length === 0 ? (
+                    <div className="flex flex-col items-center py-8 text-center">
+                      <Workflow className="h-10 w-10 text-muted-foreground/30 mb-2" />
+                      <p className="text-sm text-muted-foreground">
+                        No stages defined. Use a preset or add stages manually.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {workflowStages.map((stage, i) => (
+                        <div
+                          key={stage.id}
+                          className="flex items-center gap-3 rounded-lg border bg-card p-3"
+                        >
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                            {i + 1}
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-foreground">{stage.name}</p>
+                          </div>
+                          {stage.is_terminal && (
+                            <Badge variant="outline" className="text-xs border-success/30 text-success">
+                              Terminal
+                            </Badge>
+                          )}
+                          {i === workflowStages.length - 1 && !stage.is_terminal && (
+                            <Badge variant="outline" className="text-xs text-muted-foreground">
+                              Last stage
+                            </Badge>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-destructive/60 hover:text-destructive"
+                            onClick={() => projectId && deleteWorkflowStage(projectId, stage.id)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
                       ))}
-                    </tbody>
-                  </table>
+                      {/* Visual flow arrow */}
+                      <div className="flex items-center gap-2 px-3 py-1">
+                        <div className="flex-1 h-px bg-border" />
+                        <span className="text-xs text-muted-foreground">↑ Start → End ↓</span>
+                        <div className="flex-1 h-px bg-border" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Add Stage */}
+                <div className="flex gap-3">
+                  <Input
+                    placeholder="Add new stage (e.g. QA Testing)"
+                    value={newStageName}
+                    onChange={(e) => setNewStageName(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleAddStage()}
+                  />
+                  <Button onClick={handleAddStage} disabled={!newStageName.trim() || creatingStage} size="sm">
+                    {creatingStage ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : <Plus className="mr-1.5 h-3 w-3" />}
+                    Add
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -424,7 +556,7 @@ export default function ProjectSetupPage() {
               <Button variant="outline" onClick={() => setActiveStep('roles')}>
                 Back to Roles
               </Button>
-              <Button onClick={() => setActiveStep('invite')} disabled={!canProceedFromPermissions}>
+              <Button onClick={() => setActiveStep('invite')} disabled={!canProceedFromWorkflow}>
                 Continue to Invite
                 <ChevronRight className="ml-1.5 h-4 w-4" />
               </Button>
@@ -432,6 +564,7 @@ export default function ProjectSetupPage() {
           </motion.div>
         )}
 
+        {/* STEP 3: INVITE */}
         {activeStep === 'invite' && (
           <motion.div
             key="invite"
@@ -447,11 +580,10 @@ export default function ProjectSetupPage() {
                   Invite Team Members
                 </CardTitle>
                 <CardDescription>
-                  Invite users by email and assign them a role. They'll get access based on the role's permissions.
+                  Invite users by email and assign them a role. Access is determined by the role's access level.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Invite Form */}
                 <div className="rounded-lg border bg-muted/30 p-4">
                   <div className="flex flex-col sm:flex-row gap-3">
                     <div className="flex-1 space-y-1.5">
@@ -477,29 +609,24 @@ export default function ProjectSetupPage() {
                         <SelectContent>
                           {roles.map((role) => (
                             <SelectItem key={role.id} value={role.id}>
-                              {role.name}
+                              <span className="flex items-center gap-2">
+                                {role.name}
+                                <span className="text-[10px] text-muted-foreground">({role.access_level})</span>
+                              </span>
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="flex items-end">
-                      <Button
-                        onClick={handleInvite}
-                        disabled={!inviteEmail.trim() || !inviteRoleId || inviting}
-                      >
-                        {inviting ? (
-                          <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                        ) : (
-                          <UserPlus className="mr-1.5 h-4 w-4" />
-                        )}
+                      <Button onClick={handleInvite} disabled={!inviteEmail.trim() || !inviteRoleId || inviting}>
+                        {inviting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <UserPlus className="mr-1.5 h-4 w-4" />}
                         Invite
                       </Button>
                     </div>
                   </div>
                 </div>
 
-                {/* Members List */}
                 {members.length > 0 && (
                   <div>
                     <h4 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
@@ -510,38 +637,19 @@ export default function ProjectSetupPage() {
                       {members.map((member) => {
                         const memberRole = roles.find((r) => r.id === member.role_id);
                         return (
-                          <div
-                            key={member.id}
-                            className="flex items-center justify-between rounded-lg border bg-card p-3"
-                          >
+                          <div key={member.id} className="flex items-center justify-between rounded-lg border bg-card p-3">
                             <div className="flex items-center gap-3">
                               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-sm font-medium text-primary">
                                 {member.full_name?.[0]?.toUpperCase() || member.email[0]?.toUpperCase()}
                               </div>
                               <div>
-                                <p className="text-sm font-medium text-foreground">
-                                  {member.full_name || member.email}
-                                </p>
+                                <p className="text-sm font-medium text-foreground">{member.full_name || member.email}</p>
                                 <p className="text-xs text-muted-foreground">{member.email}</p>
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
-                              <Badge variant="secondary" className="text-xs">
-                                {memberRole?.name || 'No role'}
-                              </Badge>
-                              <Badge
-                                variant="outline"
-                                className={cn(
-                                  'text-xs',
-                                  member.status === 'ACTIVE'
-                                    ? 'border-success/30 text-success'
-                                    : member.status === 'INVITED'
-                                    ? 'border-warning/30 text-warning'
-                                    : 'border-destructive/30 text-destructive'
-                                )}
-                              >
-                                {member.status}
-                              </Badge>
+                              <Badge variant="secondary" className="text-xs">{memberRole?.name || 'No role'}</Badge>
+                              {memberRole && getAccessBadge(memberRole.access_level)}
                             </div>
                           </div>
                         );
@@ -553,8 +661,8 @@ export default function ProjectSetupPage() {
             </Card>
 
             <div className="flex justify-between">
-              <Button variant="outline" onClick={() => setActiveStep('permissions')}>
-                Back to Permissions
+              <Button variant="outline" onClick={() => setActiveStep('workflow')}>
+                Back to Workflow
               </Button>
               <Button onClick={handleFinishSetup}>
                 Finish Setup & Go to Board
