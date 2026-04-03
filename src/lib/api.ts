@@ -1,121 +1,152 @@
-import { supabase } from './supabase';
-
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
-async function getAuthHeaders(): Promise<Record<string, string>> {
-  const { data: { session } } = await supabase.auth.getSession();
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  if (session?.access_token) {
-    headers['Authorization'] = `Bearer ${session.access_token}`;
-  }
-  return headers;
+type QueryParams = Record<string, string | number | boolean | undefined | null>;
+
+function getVsmUserId(): string | null {
+  return (
+    (import.meta.env.VITE_VSM_USER_ID as string | undefined) ||
+    localStorage.getItem('vsm_user_id')
+  );
 }
 
-async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const headers = await getAuthHeaders();
-  const response = await fetch(`${API_BASE}${path}`, {
+function buildQuery(params?: QueryParams): string {
+  if (!params) return '';
+  const sp = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v === undefined || v === null) continue;
+    sp.set(k, String(v));
+  }
+  const qs = sp.toString();
+  return qs ? `?${qs}` : '';
+}
+
+async function apiRequest<T>(path: string, options: RequestInit = {}, query?: QueryParams): Promise<T> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(options.headers as Record<string, string> | undefined),
+  };
+
+  // Backend RBAC expects X-User-ID. Configured via env/localStorage.
+  const userId = getVsmUserId();
+  if (userId) headers['X-User-ID'] = userId;
+
+  const response = await fetch(`${API_BASE}${path}${buildQuery(query)}`, {
     ...options,
-    headers: { ...headers, ...options.headers },
+    headers,
   });
+
   if (!response.ok) {
     const error = await response.json().catch(() => ({ detail: 'Request failed' }));
     throw new Error(error.detail || `API error: ${response.status}`);
   }
+
+  // 204 No Content
+  if (response.status === 204) return undefined as T;
   return response.json();
 }
 
-// Workflow APIs
 export const api = {
-  // Workflows
-  getWorkflows: () => apiRequest<any[]>('/api/workflows'),
-  getWorkflow: (id: string) => apiRequest<any>(`/api/workflows/${id}`),
+  // ── Projects ───────────────────────────────────────────────────────────────
+  getProjects: () => apiRequest<any[]>('/projects'),
+  getProject: (projectId: string) => apiRequest<any>(`/projects/${projectId}`),
+  createProject: (data: { name: string }) =>
+    apiRequest<any>('/projects', { method: 'POST', body: JSON.stringify({ name: data.name }) }),
 
-  // Tasks
-  getTasks: (params?: Record<string, string>) => {
-    const query = params ? '?' + new URLSearchParams(params).toString() : '';
-    return apiRequest<any[]>(`/api/tasks${query}`);
-  },
-  getTask: (id: string) => apiRequest<any>(`/api/tasks/${id}`),
-  updateTask: (id: string, data: any) =>
-    apiRequest<any>(`/api/tasks/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  createTask: (data: any) =>
-    apiRequest<any>('/api/tasks', { method: 'POST', body: JSON.stringify(data) }),
+  // ── Teams ──────────────────────────────────────────────────────────────────
+  listTeams: (projectId: string) => apiRequest<any[]>(`/projects/${projectId}/teams`),
+  createTeam: (projectId: string, data: { name: string }) =>
+    apiRequest<any>(`/projects/${projectId}/teams`, { method: 'POST', body: JSON.stringify(data) }),
+  getTeam: (teamId: string) => apiRequest<any>(`/teams/${teamId}`),
 
-  // Task Activity
-  getTaskActivity: (taskId: string) => apiRequest<any[]>(`/api/tasks/${taskId}/activity`),
+  // ── Roles (team-scoped) ────────────────────────────────────────────────────
+  listRoles: (teamId: string) =>
+    apiRequest<any[]>(`/teams/${teamId}/roles`, {}, { team_id: teamId }),
+  createRole: (teamId: string, data: { name: string; permission_codes: string[] }) =>
+    apiRequest<any>(`/teams/${teamId}/roles`, { method: 'POST', body: JSON.stringify(data) }, { team_id: teamId }),
+  updateRole: (teamId: string, roleId: string, data: Partial<{ name: string; permission_codes: string[] }>) =>
+    apiRequest<any>(`/teams/${teamId}/roles/${roleId}`, { method: 'PATCH', body: JSON.stringify(data) }, { team_id: teamId }),
+  deleteRole: (teamId: string, roleId: string) =>
+    apiRequest<void>(`/teams/${teamId}/roles/${roleId}`, { method: 'DELETE' }, { team_id: teamId }),
 
-  // AI Decisions
-  getAIDecisions: (params?: Record<string, string>) => {
-    const query = params ? '?' + new URLSearchParams(params).toString() : '';
-    return apiRequest<any[]>(`/api/ai/decisions${query}`);
-  },
-  submitFeedback: (data: { decision_id: string; feedback: string; correct_action?: string }) =>
-    apiRequest<any>('/api/ai/feedback', { method: 'POST', body: JSON.stringify(data) }),
-  approveDecision: (decisionId: string) =>
-    apiRequest<any>(`/api/ai/decisions/${decisionId}/approve`, { method: 'POST' }),
-  rejectDecision: (decisionId: string) =>
-    apiRequest<any>(`/api/ai/decisions/${decisionId}/reject`, { method: 'POST' }),
+  // ── Workflow statuses (team-scoped) ────────────────────────────────────────
+  listStatuses: (teamId: string) => apiRequest<any[]>(`/teams/${teamId}/workflow/statuses`, {}, { team_id: teamId }),
+  createStatus: (teamId: string, data: { name: string; category: string; stage_order: number; is_terminal?: boolean }) =>
+    apiRequest<any>(`/teams/${teamId}/workflow/statuses`, { method: 'POST', body: JSON.stringify(data) }, { team_id: teamId }),
+  updateStatus: (teamId: string, statusId: string, data: Partial<{ name: string; category: string; stage_order: number; is_terminal: boolean }>) =>
+    apiRequest<any>(`/teams/${teamId}/workflow/statuses/${statusId}`, { method: 'PATCH', body: JSON.stringify(data) }, { team_id: teamId }),
+  deleteStatus: (teamId: string, statusId: string) =>
+    apiRequest<void>(`/teams/${teamId}/workflow/statuses/${statusId}`, { method: 'DELETE' }, { team_id: teamId }),
 
-  // AI Chat
-  sendChatMessage: (message: string, context?: any) =>
-    apiRequest<any>('/api/ai/chat', { method: 'POST', body: JSON.stringify({ message, context }) }),
+  // ── Members / invitations (team-scoped) ────────────────────────────────────
+  listMembers: (teamId: string) => apiRequest<any[]>(`/teams/${teamId}/members`, {}, { team_id: teamId }),
+  inviteMember: (teamId: string, data: { email: string; name: string; role_id: string }) =>
+    apiRequest<any>(`/teams/${teamId}/invitations`, { method: 'POST', body: JSON.stringify(data) }, { team_id: teamId }),
+  updateMemberRole: (teamId: string, memberId: string, data: { role_id: string }) =>
+    apiRequest<any>(`/teams/${teamId}/members/${memberId}/role`, { method: 'PATCH', body: JSON.stringify(data) }, { team_id: teamId }),
+  removeMember: (teamId: string, memberId: string) =>
+    apiRequest<void>(`/teams/${teamId}/members/${memberId}`, { method: 'DELETE' }, { team_id: teamId }),
 
-  // Event Log
-  getEventLog: (params?: Record<string, string>) => {
-    const query = params ? '?' + new URLSearchParams(params).toString() : '';
-    return apiRequest<any[]>(`/api/events${query}`);
-  },
+  // ── Tasks (team-scoped via query) ──────────────────────────────────────────
+  listTasks: (teamId: string, limit = 50, offset = 0) =>
+    apiRequest<any[]>('/tasks', {}, { team_id: teamId, limit, offset }),
+  createTask: (teamId: string, data: { title: string; description?: string; sprint_id?: number | null; current_status_id?: number | null; assignee_id?: number | null }) =>
+    apiRequest<any>('/tasks', { method: 'POST', body: JSON.stringify({ team_id: Number(teamId), ...data }) }, { team_id: teamId }),
+  updateTask: (taskId: string, teamId: string, data: { title?: string; description?: string; sprint_id?: number | null; current_status_id?: number | null; assignee_id?: number | null }) =>
+    apiRequest<any>(`/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify(data) }, { team_id: teamId }),
+  deleteTask: (taskId: string, teamId: string) =>
+    apiRequest<void>(`/tasks/${taskId}`, { method: 'DELETE' }, { team_id: teamId }),
+  manualTransition: (taskId: string, teamId: string, data: { new_status_id: number; reason?: string }) =>
+    apiRequest<any>(`/tasks/${taskId}/transition`, { method: 'POST', body: JSON.stringify(data) }, { team_id: teamId }),
+  getTaskActivity: (taskId: string, teamId: string) =>
+    apiRequest<any[]>(`/tasks/${taskId}/activity`, {}, { team_id: teamId }),
+  getTaskDecisions: (taskId: string, teamId: string) =>
+    apiRequest<any[]>(`/tasks/${taskId}/decisions`, {}, { team_id: teamId }),
+  approveDecision: (taskId: string, decisionId: string, teamId: string) =>
+    apiRequest<any>(`/tasks/${taskId}/decisions/${decisionId}/approve`, { method: 'POST' }, { team_id: teamId }),
+  rejectDecision: (taskId: string, decisionId: string, teamId: string) =>
+    apiRequest<any>(`/tasks/${taskId}/decisions/${decisionId}/reject`, { method: 'POST' }, { team_id: teamId }),
 
-// Organizations
-  getOrganization: () => apiRequest<any>('/api/organization'),
+  // ── Sprints (team-scoped) ──────────────────────────────────────────────────
+  listSprints: (teamId: string) =>
+    apiRequest<any[]>(`/teams/${teamId}/sprints/`),
+  createSprint: (teamId: string, data: { name: string; goal?: string; startDate?: string; endDate?: string }) =>
+    apiRequest<any>(`/teams/${teamId}/sprints/`, { method: 'POST', body: JSON.stringify(data) }),
+  updateSprint: (teamId: string, sprintId: string, data: { name?: string; goal?: string; startDate?: string; endDate?: string }) =>
+    apiRequest<any>(`/teams/${teamId}/sprints/${sprintId}`, { method: 'PATCH', body: JSON.stringify(data) }),
 
-  // Users
-  getUsers: () => apiRequest<any[]>('/api/users'),
+  // Sprint lifecycle
+  startSprint: (teamId: string, sprintId: string, data: { goal?: string; startDate?: string; endDate?: string }) =>
+    apiRequest<any>(`/teams/${teamId}/sprints/${sprintId}/start`, { method: 'POST', body: JSON.stringify(data) }),
+  completeSprint: (teamId: string, sprintId: string, data: { rollover_sprint_id?: number | null }) =>
+    apiRequest<any>(`/teams/${teamId}/sprints/${sprintId}/complete`, { method: 'POST', body: JSON.stringify(data) }),
 
-  // Projects
-  getProjects: () => apiRequest<any[]>('/api/projects'),
-  getProject: (id: string) => apiRequest<any>(`/api/projects/${id}`),
-  createProject: (data: { name: string; description?: string; key?: string }) =>
-    apiRequest<any>('/api/projects', { method: 'POST', body: JSON.stringify(data) }),
-  updateProject: (id: string, data: any) =>
-    apiRequest<any>(`/api/projects/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  deleteProject: (id: string) =>
-    apiRequest<any>(`/api/projects/${id}`, { method: 'DELETE' }),
+  // Sprint tasks
+  getSprintTasks: (teamId: string, sprintId: string) =>
+    apiRequest<any[]>(`/teams/${teamId}/sprints/${sprintId}/tasks`),
+  assignTaskToSprint: (teamId: string, sprintId: string, taskId: string) =>
+    apiRequest<any>(`/teams/${teamId}/sprints/${sprintId}/tasks/${taskId}`, { method: 'POST' }),
+  removeTaskFromSprint: (teamId: string, sprintId: string, taskId: string) =>
+    apiRequest<any>(`/teams/${teamId}/sprints/${sprintId}/tasks/${taskId}`, { method: 'DELETE' }),
 
-  // Roles
-  getProjectRoles: (projectId: string) =>
-    apiRequest<any[]>(`/api/projects/${projectId}/roles`),
-  createRole: (projectId: string, data: { name: string; description?: string; access_level: string }) =>
-    apiRequest<any>(`/api/projects/${projectId}/roles`, { method: 'POST', body: JSON.stringify(data) }),
-  updateRole: (projectId: string, roleId: string, data: any) =>
-    apiRequest<any>(`/api/projects/${projectId}/roles/${roleId}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  deleteRole: (projectId: string, roleId: string) =>
-    apiRequest<any>(`/api/projects/${projectId}/roles/${roleId}`, { method: 'DELETE' }),
+  // Backlog
+  getBacklogTasks: (teamId: string, limit = 100, offset = 0) =>
+    apiRequest<any[]>(`/teams/${teamId}/backlog`, {}, { limit, offset }),
 
-  // Workflow Stages
-  getProjectWorkflowStages: (projectId: string) =>
-    apiRequest<any[]>(`/api/projects/${projectId}/workflows`),
-  createWorkflowStage: (projectId: string, data: { name: string; stage_order: number; is_terminal?: boolean }) =>
-    apiRequest<any>(`/api/projects/${projectId}/workflows`, { method: 'POST', body: JSON.stringify(data) }),
-  updateWorkflowStage: (projectId: string, stageId: string, data: any) =>
-    apiRequest<any>(`/api/projects/${projectId}/workflows/${stageId}`, { method: 'PATCH', body: JSON.stringify(data) }),
-  deleteWorkflowStage: (projectId: string, stageId: string) =>
-    apiRequest<any>(`/api/projects/${projectId}/workflows/${stageId}`, { method: 'DELETE' }),
-  reorderWorkflowStages: (projectId: string, stages: { id: string; stage_order: number }[]) =>
-    apiRequest<any>(`/api/projects/${projectId}/workflows/reorder`, { method: 'POST', body: JSON.stringify({ stages }) }),
+  // ── Event feed ─────────────────────────────────────────────────────────────
+  getEventLog: (teamId: string, limit = 100) =>
+    apiRequest<any[]>('/tasks/events', {}, { team_id: teamId, limit }),
+  sendChatMessage: (message: string, teamId: string) =>
+    apiRequest<any>('/webhooks/chat', {
+      method: 'POST',
+      body: JSON.stringify({
+        user_id: Number(getVsmUserId() || 0),
+        team_id: Number(teamId),
+        message,
+        timestamp: String(Math.floor(Date.now() / 1000)),
+        platform_message_id: `web-${Date.now()}`,
+      }),
+    }),
 
-  // Team Members
-  getProjectMembers: (projectId: string) =>
-    apiRequest<any[]>(`/api/projects/${projectId}/members`),
-  inviteMember: (projectId: string, data: { email: string; role_id: string }) =>
-    apiRequest<any>(`/api/projects/${projectId}/members/invite`, { method: 'POST', body: JSON.stringify(data) }),
-  updateMemberRole: (projectId: string, memberId: string, roleId: string) =>
-    apiRequest<any>(`/api/projects/${projectId}/members/${memberId}`, { method: 'PATCH', body: JSON.stringify({ role_id: roleId }) }),
-  removeMember: (projectId: string, memberId: string) =>
-    apiRequest<any>(`/api/projects/${projectId}/members/${memberId}`, { method: 'DELETE' }),
-
-  // Permissions (predefined list)
-  getPermissions: () => apiRequest<any[]>('/api/permissions'),
+  // ── Permissions self-check ────────────────────────────────────────────────
+  myPermissions: (teamId: string) => apiRequest<{ permissions: string[] }>('/me/permissions', undefined, { team_id: teamId }),
 };

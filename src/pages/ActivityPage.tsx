@@ -1,19 +1,32 @@
 import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
 import { Activity, Filter, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { useProjectStore } from '@/stores/projectStore';
+import { useParams } from 'react-router-dom';
+import { api } from '@/lib/api';
 
 export default function ActivityPage() {
+  const { projectId } = useParams<{ projectId: string }>();
+  const { currentTeamId, ensureDefaultTeam } = useProjectStore();
   const [events, setEvents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchEvents = () => {
-    setLoading(true);
-    api.getEventLog()
-      .then(setEvents)
-      .catch(() => setEvents([]))
-      .finally(() => setLoading(false));
+    const run = async () => {
+      setLoading(true);
+      try {
+        if (!projectId) return setEvents([]);
+        const teamId = currentTeamId || (await ensureDefaultTeam(projectId));
+        const data = await api.getEventLog(teamId);
+        setEvents(data || []);
+      } catch {
+        setEvents([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    void run();
   };
 
   useEffect(() => { fetchEvents(); }, []);

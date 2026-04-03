@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useProjectStore, ACCESS_LEVELS, Role, AccessLevel, WorkflowStage } from '@/stores/projectStore';
+import { useProjectStore, ACCESS_LEVELS, AccessLevel } from '@/stores/projectStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -19,6 +19,8 @@ import {
   ArrowRight,
   Check,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   FolderKanban,
   GitBranch,
   GripVertical,
@@ -77,6 +79,7 @@ export default function ProjectSetupPage() {
     fetchWorkflowStages,
     createWorkflowStage,
     deleteWorkflowStage,
+    reorderWorkflowStages,
     setCurrentProject,
   } = useProjectStore();
 
@@ -90,6 +93,7 @@ export default function ProjectSetupPage() {
   // Workflow state
   const [newStageName, setNewStageName] = useState('');
   const [creatingStage, setCreatingStage] = useState(false);
+  const [applyingPreset, setApplyingPreset] = useState(false);
 
   // Invite state
   const [inviteEmail, setInviteEmail] = useState('');
@@ -145,18 +149,42 @@ export default function ProjectSetupPage() {
 
   const handleApplyPreset = async (stages: string[]) => {
     if (!projectId) return;
-    // Delete existing stages first
-    for (const s of workflowStages) {
-      await deleteWorkflowStage(projectId, s.id);
+    setApplyingPreset(true);
+    try {
+      // Delete existing stages in parallel
+      await Promise.all(workflowStages.map((s) => deleteWorkflowStage(projectId, s.id)));
+      
+      // Create new stages in parallel
+      await Promise.all(
+        stages.map((stageName, i) =>
+          createWorkflowStage(projectId, {
+            name: stageName,
+            stage_order: i,
+            is_terminal: i === stages.length - 1,
+          })
+        )
+      );
+    } finally {
+      setApplyingPreset(false);
     }
-    // Create new stages
-    for (let i = 0; i < stages.length; i++) {
-      await createWorkflowStage(projectId, {
-        name: stages[i],
-        stage_order: i,
-        is_terminal: i === stages.length - 1,
-      });
-    }
+  };
+
+  const handleMoveStage = async (index: number, direction: 'up' | 'down') => {
+    if (!projectId || applyingPreset) return;
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= workflowStages.length) return;
+
+    const newStages = [...workflowStages];
+    const temp = newStages[index];
+    newStages[index] = newStages[newIndex];
+    newStages[newIndex] = temp;
+
+    const updates = newStages.map((stage, i) => ({
+      id: stage.id,
+      stage_order: i,
+    }));
+
+    await reorderWorkflowStages(projectId, updates);
   };
 
   const handleInvite = async () => {
@@ -174,7 +202,6 @@ export default function ProjectSetupPage() {
   const handleFinishSetup = async () => {
     if (!projectId) return;
     try {
-      await api.updateProject(projectId, { setup_complete: true });
       navigate(`/projects/${projectId}/board`);
     } catch {
       navigate(`/projects/${projectId}/board`);
@@ -471,6 +498,7 @@ export default function ProjectSetupPage() {
                         size="sm"
                         className="text-xs"
                         onClick={() => handleApplyPreset(preset.stages)}
+                        disabled={applyingPreset}
                       >
                         <GitBranch className="mr-1.5 h-3 w-3" />
                         {preset.name}
@@ -486,7 +514,12 @@ export default function ProjectSetupPage() {
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
                     Workflow Pipeline ({workflowStages.length} stages)
                   </p>
-                  {workflowStages.length === 0 ? (
+                  {applyingPreset ? (
+                    <div className="flex flex-col items-center py-8 text-center bg-card rounded-lg border">
+                      <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
+                      <p className="text-sm text-muted-foreground">Applying preset pipeline...</p>
+                    </div>
+                  ) : workflowStages.length === 0 ? (
                     <div className="flex flex-col items-center py-8 text-center">
                       <Workflow className="h-10 w-10 text-muted-foreground/30 mb-2" />
                       <p className="text-sm text-muted-foreground">
@@ -500,6 +533,22 @@ export default function ProjectSetupPage() {
                           key={stage.id}
                           className="flex items-center gap-3 rounded-lg border bg-card p-3"
                         >
+                          <div className="flex flex-col gap-0.5 mr-1">
+                            <button 
+                              onClick={() => handleMoveStage(i, 'up')} 
+                              disabled={i === 0}
+                              className="text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:hover:text-muted-foreground"
+                            >
+                              <ChevronUp className="h-3 w-3" />
+                            </button>
+                            <button 
+                              onClick={() => handleMoveStage(i, 'down')} 
+                              disabled={i === workflowStages.length - 1}
+                              className="text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:hover:text-muted-foreground"
+                            >
+                              <ChevronDown className="h-3 w-3" />
+                            </button>
+                          </div>
                           <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
                             {i + 1}
                           </div>

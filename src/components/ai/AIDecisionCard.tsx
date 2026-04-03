@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
+import { useWorkflowStore } from '@/stores/workflowStore';
 
 interface AIDecisionCardProps {
   decision: AIDecision;
@@ -20,11 +21,13 @@ const statusStyles: Record<string, string> = {
 export function AIDecisionCard({ decision, onAction }: AIDecisionCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [acting, setActing] = useState(false);
+  const teamId = useWorkflowStore((s) => s.teamId);
 
   const handleApprove = async () => {
     setActing(true);
     try {
-      await api.approveDecision(decision.id);
+      if (!teamId) throw new Error('No team selected');
+      await api.approveDecision(decision.task_id, decision.id, teamId);
       onAction?.();
     } catch {
     } finally {
@@ -35,7 +38,8 @@ export function AIDecisionCard({ decision, onAction }: AIDecisionCardProps) {
   const handleReject = async () => {
     setActing(true);
     try {
-      await api.rejectDecision(decision.id);
+      if (!teamId) throw new Error('No team selected');
+      await api.rejectDecision(decision.task_id, decision.id, teamId);
       onAction?.();
     } catch {
     } finally {

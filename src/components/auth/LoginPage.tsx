@@ -3,236 +3,224 @@ import { useAuthStore } from '@/stores/authStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
-import { motion } from 'framer-motion';
-import { Github, Mail, Loader2, Bot, ArrowRight } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Loader2, TriangleAlert, Mail } from 'lucide-react';
+import { supabase } from '@/lib/supabase'; // to handle email magic link directly
 
 export function LoginPage() {
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [isForgot, setIsForgot] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [fullName, setFullName] = useState('');
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [email, setEmail] = useState('');
+  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const [emailSent, setEmailSent] = useState(false);
 
-  const { signInWithEmail, signUpWithEmail, signInWithGithub, signInWithGoogle, resetPassword } =
-    useAuthStore();
+  const { signInWithGoogle } = useAuthStore();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleOAuthLogin = async (provider: 'google' | 'azure' | 'apple' | 'slack') => {
     setLoading(true);
     setError('');
-    setMessage('');
     try {
-      if (isForgot) {
-        await resetPassword(email);
-        setMessage('Check your email for a password reset link.');
-      } else if (isSignUp) {
-        await signUpWithEmail(email, password, fullName);
-        setMessage('Check your email to confirm your account.');
+      if (provider === 'google') {
+        await signInWithGoogle();
       } else {
-        await signInWithEmail(email, password);
+        // Fallback for mocked providers
+        setError(`${provider} login is not fully configured yet.`);
+        setLoading(false);
       }
     } catch (err: any) {
-      setError(err.message);
+      setError(err.message || `Failed to initialize ${provider} login`);
+      setLoading(false);
+    }
+  };
+
+  const handleEmailSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) {
+      setError('Please enter your email');
+      return;
+    }
+    
+    setLoading(true);
+    setError('');
+    try {
+      const { error: authError } = await supabase.auth.signInWithOtp({
+        email: email.trim(),
+        options: {
+          emailRedirectTo: window.location.origin
+        }
+      });
+      
+      if (authError) throw authError;
+      setEmailSent(true);
+    } catch (err: any) {
+      setError(err.message || 'Failed to send login link');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleOAuth = async (provider: 'github' | 'google') => {
-    setError('');
-    try {
-      if (provider === 'github') await signInWithGithub();
-      else await signInWithGoogle();
-    } catch (err: any) {
-      setError(err.message);
-    }
-  };
-
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-4">
+    <div className="flex min-h-screen items-center justify-center bg-[#FAFBFC] p-4 relative overflow-hidden">
+      
+      {/* Background abstract decoration matching the screenshot */}
+      <div className="absolute bottom-0 left-0 right-0 pointer-events-none opacity-50 flex justify-between items-end px-10">
+        <svg width="400" height="300" viewBox="0 0 400 300" fill="none" opacity="0.6">
+          <path d="M0 200 L100 250 L200 150 L300 200 L400 100 L400 300 L0 300 Z" fill="#E3F0FF" />
+          <path d="M0 250 L100 200 L200 280 L300 220 L400 150 L400 300 L0 300 Z" fill="#0052CC" opacity="0.1" />
+        </svg>
+        <svg width="400" height="300" viewBox="0 0 400 300" fill="none" opacity="0.6" className="scale-x-[-1]">
+          <path d="M0 200 L100 250 L200 150 L300 200 L400 100 L400 300 L0 300 Z" fill="#E3F0FF" />
+          <path d="M0 250 L100 200 L200 280 L300 220 L400 150 L400 300 L0 300 Z" fill="#0052CC" opacity="0.1" />
+        </svg>
+      </div>
+
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className="w-full max-w-md"
+        transition={{ duration: 0.3 }}
+        className="w-full max-w-[400px] bg-white rounded shadow-sm border border-[#DFE1E6] p-8 z-10"
       >
-        {/* Brand Header */}
-        <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-xl bg-primary">
-            <Bot className="h-7 w-7 text-primary-foreground" />
+        {/* Atlassian-style Header */}
+        <div className="mb-8 text-center flex flex-col items-center">
+          <div className="flex items-center justify-center gap-2 mb-6">
+            <div className="text-[#0052CC]">
+              {/* Custom SVG replacing Atlassian Logo for VSM */}
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2L22 20H2L12 2ZM12 8L7.5 16H16.5L12 8Z" />
+              </svg>
+            </div>
+            <h1 className="text-[28px] font-bold text-[#0052CC] tracking-tight">Virtual Scrum Master</h1>
           </div>
-          <h1 className="text-2xl font-bold text-foreground">AI Workflow Engine</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Intelligent project management with AI Scrum Master
-          </p>
+          <h2 className="text-[#172B4D] font-medium text-[16px]">
+            {mode === 'login' ? 'Log in to continue' : 'Sign up to continue'}
+          </h2>
         </div>
 
-        <Card className="border-border shadow-lg">
-          <CardHeader className="pb-4">
-            <CardTitle className="text-lg">
-              {isForgot ? 'Reset Password' : isSignUp ? 'Create Account' : 'Welcome Back'}
-            </CardTitle>
-            <CardDescription>
-              {isForgot
-                ? 'Enter your email to receive a reset link'
-                : isSignUp
-                ? 'Sign up to start managing workflows'
-                : 'Sign in to your workspace'}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {!isForgot && (
-              <>
-                <div className="grid grid-cols-2 gap-3">
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => handleOAuth('github')}
-                    type="button"
-                  >
-                    <Github className="mr-2 h-4 w-4" />
-                    GitHub
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => handleOAuth('google')}
-                    type="button"
-                  >
-                    <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
-                      <path
-                        fill="currentColor"
-                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
-                      />
-                      <path
-                        fill="currentColor"
-                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                      />
-                      <path
-                        fill="currentColor"
-                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                      />
-                      <path
-                        fill="currentColor"
-                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                      />
-                    </svg>
-                    Google
-                  </Button>
-                </div>
-
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <Separator />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-card px-2 text-muted-foreground">or continue with email</span>
-                  </div>
-                </div>
-              </>
-            )}
-
-            <form onSubmit={handleSubmit} className="space-y-3">
-              {isSignUp && !isForgot && (
-                <div className="space-y-1.5">
-                  <Label htmlFor="fullName">Full Name</Label>
+        <AnimatePresence mode="wait">
+          {!emailSent ? (
+            <motion.div
+              key="form"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="space-y-6"
+            >
+              <form onSubmit={handleEmailSubmit} className="space-y-3">
+                <div className="space-y-1">
+                  <Label htmlFor="email" className="text-[12px] font-semibold text-[#5E6C84]">
+                    Email <span className="text-red-500">*</span>
+                  </Label>
                   <Input
-                    id="fullName"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="John Doe"
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Enter your email"
+                    className="h-10 border-2 border-[#DFE1E6] focus:border-[#4C9AFF] focus:ring-0 bg-[#FAFBFC] hover:bg-[#EBECF0] transition-colors shadow-none text-[14px]"
                     required
                   />
                 </div>
-              )}
 
-              <div className="space-y-1.5">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@company.com"
-                  required
-                />
+                <Button 
+                  type="submit" 
+                  disabled={loading}
+                  className="w-full h-10 bg-[#0052CC] hover:bg-[#0047B3] text-white font-medium rounded-[3px] shadow-sm text-[14px] mt-2"
+                >
+                  {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {mode === 'login' ? 'Continue' : 'Sign up'}
+                </Button>
+              </form>
+
+              <div className="relative flex items-center py-2">
+                <div className="flex-grow border-t border-[#DFE1E6]"></div>
+                <span className="flex-shrink-0 mx-3 text-[11px] font-medium text-[#5E6C84] uppercase tracking-wider">
+                  Or continue with:
+                </span>
+                <div className="flex-grow border-t border-[#DFE1E6]"></div>
               </div>
 
-              {!isForgot && (
-                <div className="space-y-1.5">
-                  <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    required
-                    minLength={6}
-                  />
-                </div>
-              )}
+              <div className="space-y-3">
+                <Button 
+                  variant="outline" 
+                  onClick={() => handleOAuthLogin('google')} 
+                  disabled={loading}
+                  className="w-full h-10 bg-white hover:bg-slate-50 text-[#172B4D] border-2 border-[#DFE1E6] hover:border-[#DFE1E6] rounded-[3px] shadow-sm justify-center font-medium"
+                >
+                  <svg className="w-[18px] h-[18px] mr-2" viewBox="0 0 24 24">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                  </svg>
+                  Google
+                </Button>
+
+
+              </div>
 
               {error && (
-                <p className="text-sm text-destructive">{error}</p>
+                <div className="flex items-center gap-2 p-3 mt-4 text-sm rounded bg-red-50 text-red-600 border border-red-200">
+                  <TriangleAlert className="h-4 w-4" />
+                  {error}
+                </div>
               )}
-              {message && (
-                <p className="text-sm text-success">{message}</p>
-              )}
-
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <ArrowRight className="mr-2 h-4 w-4" />
-                )}
-                {isForgot ? 'Send Reset Link' : isSignUp ? 'Create Account' : 'Sign In'}
-              </Button>
-            </form>
-
-            <div className="flex items-center justify-between text-sm">
-              {!isForgot && (
-                <button
-                  type="button"
-                  onClick={() => setIsForgot(true)}
-                  className="text-primary hover:underline"
-                >
-                  Forgot password?
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => {
-                  setIsSignUp(!isSignUp);
-                  setIsForgot(false);
-                  setError('');
-                  setMessage('');
-                }}
-                className="text-primary hover:underline"
+            </motion.div>
+          ) : (
+            <motion.div
+              key="success"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="text-center py-6"
+            >
+              <div className="mx-auto w-16 h-16 bg-blue-50 text-[#0052CC] rounded-full flex items-center justify-center mb-4">
+                <Mail className="h-8 w-8" />
+              </div>
+              <h3 className="text-lg font-medium text-[#172B4D] mb-2">Check your inbox</h3>
+              <p className="text-sm text-[#5E6C84] mb-6">
+                We've sent a magic link to <br/>
+                <span className="font-semibold text-[#172B4D]">{email}</span>
+              </p>
+              <Button 
+                variant="outline" 
+                onClick={() => setEmailSent(false)} 
+                className="text-[#0052CC] border-[#DFE1E6]"
               >
-                {isSignUp ? 'Already have an account?' : "Don't have an account?"}
-              </button>
-              {isForgot && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsForgot(false);
-                    setError('');
-                    setMessage('');
-                  }}
-                  className="text-primary hover:underline"
-                >
-                  Back to sign in
+                Use a different email
+              </Button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {!emailSent && (
+          <div className="mt-8 text-center border-t border-[#DFE1E6] pt-6">
+            {mode === 'login' ? (
+              <p className="text-[14px] text-[#5E6C84]">
+                <a href="#" className="text-[#0052CC] hover:underline transition-all">Can't log in?</a>
+                <span className="mx-2">•</span>
+                <button onClick={() => setMode('signup')} className="text-[#0052CC] hover:underline transition-all">
+                  Create an account
                 </button>
-              )}
+              </p>
+            ) : (
+              <p className="text-[14px] text-[#5E6C84]">
+                <button onClick={() => setMode('login')} className="text-[#0052CC] hover:underline transition-all">
+                  Already have an account? Log in
+                </button>
+              </p>
+            )}
+            <div className="mt-6 flex flex-col items-center gap-1">
+              <div className="flex items-center gap-2 text-[#0052CC] opacity-60">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2L22 20H2L12 2Z" />
+                </svg>
+                <span className="font-bold tracking-tight">Virtual Scrum Master</span>
+              </div>
+              <p className="text-[12px] text-[#5E6C84]">
+                One account for VSM, Planning, AI, and <a href="#" className="text-[#0052CC] hover:underline">more</a>.
+              </p>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        )}
       </motion.div>
     </div>
   );

@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { api } from '@/lib/api';
+import { useProjectStore } from '@/stores/projectStore';
+import { useParams } from 'react-router-dom';
 import { Bot, Send, X, MessageSquare, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +16,8 @@ interface Message {
 }
 
 export function AIChatAssistant() {
+  const { projectId } = useParams<{ projectId: string }>();
+  const { currentTeamId, ensureDefaultTeam } = useProjectStore();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -39,7 +43,12 @@ export function AIChatAssistant() {
     setLoading(true);
 
     try {
-      const response = await api.sendChatMessage(userMsg.content);
+      let teamId = currentTeamId;
+      if (!teamId && projectId) {
+        teamId = await ensureDefaultTeam(projectId);
+      }
+      if (!teamId) throw new Error('No team selected');
+      const response = await api.sendChatMessage(userMsg.content, teamId);
       const assistantMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',

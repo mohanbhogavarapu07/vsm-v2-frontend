@@ -25,9 +25,12 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const { projectId } = useParams<{ projectId: string }>();
   const { user, signOut } = useAuthStore();
-  const { currentProject } = useProjectStore();
+  const { currentProject, permissions } = useProjectStore();
 
-  const initials = user?.user_metadata?.full_name
+  const hasPermission = (perm: string) => permissions.includes(perm);
+
+  const userMeta = (user as any)?.user_metadata;
+  const initials = userMeta?.full_name
     ?.split(' ')
     .map((n: string) => n[0])
     .join('')
@@ -38,8 +41,10 @@ export function AppSidebar() {
         { path: `/projects/${projectId}/board`, icon: KanbanSquare, label: 'Board' },
         { path: `/projects/${projectId}/activity`, icon: Activity, label: 'AI Activity' },
         { path: `/projects/${projectId}/decisions`, icon: Bot, label: 'AI Decisions' },
-        { path: `/projects/${projectId}/team`, icon: Users, label: 'Team' },
-        { path: `/projects/${projectId}/settings`, icon: Settings, label: 'Settings' },
+        ...(hasPermission('MANAGE_TEAM') ? [
+          { path: `/projects/${projectId}/team`, icon: Users, label: 'Team' },
+          { path: `/projects/${projectId}/settings`, icon: Settings, label: 'Settings' },
+        ] : []),
       ]
     : [];
 
@@ -124,7 +129,7 @@ export function AppSidebar() {
           {!collapsed && (
             <div className="flex-1 truncate">
               <p className="truncate text-sm font-medium text-foreground">
-                {user?.user_metadata?.full_name || 'User'}
+                {userMeta?.full_name || 'User'}
               </p>
               <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
             </div>

@@ -1,13 +1,26 @@
 import { useEffect } from 'react';
 import { useWorkflowStore } from '@/stores/workflowStore';
+import { useProjectStore } from '@/stores/projectStore';
+import { useParams } from 'react-router-dom';
 import { AIDecisionCard } from '@/components/ai/AIDecisionCard';
 import { Bot, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export default function DecisionsPage() {
-  const { aiDecisions, fetchAIDecisions } = useWorkflowStore();
+  const { projectId } = useParams<{ projectId: string }>();
+  const { currentTeamId, ensureDefaultTeam } = useProjectStore();
+  const { aiDecisions, fetchAIDecisions, fetchTasks, setTeamId } = useWorkflowStore();
 
-  useEffect(() => { fetchAIDecisions(); }, [fetchAIDecisions]);
+  useEffect(() => {
+    const boot = async () => {
+      if (!projectId) return;
+      const teamId = currentTeamId || (await ensureDefaultTeam(projectId));
+      setTeamId(teamId);
+      await fetchTasks();
+      await fetchAIDecisions();
+    };
+    void boot();
+  }, [projectId, currentTeamId, ensureDefaultTeam, setTeamId, fetchTasks, fetchAIDecisions]);
 
   const pending = aiDecisions.filter((d) => d.status === 'PENDING_APPROVAL');
   const others = aiDecisions.filter((d) => d.status !== 'PENDING_APPROVAL');

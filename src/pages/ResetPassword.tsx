@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -8,34 +7,13 @@ import { Button } from '@/components/ui/button';
 import { Bot, Loader2 } from 'lucide-react';
 
 export default function ResetPassword() {
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
-  const [error, setError] = useState('');
+  const [message, setMessage] = useState('Password reset is managed by backend user administration.');
   const navigate = useNavigate();
 
   useEffect(() => {
-    const hash = window.location.hash;
-    if (!hash.includes('type=recovery')) {
-      setError('Invalid or expired reset link.');
-    }
+    const timer = setTimeout(() => navigate('/'), 1500);
+    return () => clearTimeout(timer);
   }, []);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    try {
-      const { error } = await supabase.auth.updateUser({ password });
-      if (error) throw error;
-      setMessage('Password updated successfully! Redirecting...');
-      setTimeout(() => navigate('/'), 2000);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
@@ -48,28 +26,11 @@ export default function ResetPassword() {
         </div>
         <Card>
           <CardHeader>
-            <CardTitle>Set New Password</CardTitle>
+            <CardTitle>Backend Managed Users</CardTitle>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-1.5">
-                <Label>New Password</Label>
-                <Input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  minLength={6}
-                />
-              </div>
-              {error && <p className="text-sm text-destructive">{error}</p>}
-              {message && <p className="text-sm text-success">{message}</p>}
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Update Password
-              </Button>
-            </form>
+            <p className="text-sm text-muted-foreground">{message}</p>
+            <Button className="w-full mt-4" onClick={() => navigate('/')}>Back to app</Button>
           </CardContent>
         </Card>
       </div>

@@ -39,8 +39,6 @@ export default function ProjectsPage() {
     try {
       const project = await createProject({
         name: name.trim(),
-        description: description.trim() || undefined,
-        key: key.trim().toUpperCase() || undefined,
       });
       setOpen(false);
       setName('');
@@ -56,11 +54,7 @@ export default function ProjectsPage() {
 
   const handleOpenProject = (project: Project) => {
     setCurrentProject(project);
-    if (!project.setup_complete) {
-      navigate(`/projects/${project.id}/setup`);
-    } else {
-      navigate(`/projects/${project.id}/board`);
-    }
+    navigate(`/projects/${project.id}/setup`);
   };
 
   const generateKey = (projectName: string) => {
@@ -109,20 +103,6 @@ export default function ProjectsPage() {
                     if (!key) setKey(generateKey(e.target.value));
                   }}
                 />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="project-key">Project Key</Label>
-                <Input
-                  id="project-key"
-                  placeholder="e.g. MAS"
-                  value={key}
-                  onChange={(e) => setKey(e.target.value.toUpperCase())}
-                  maxLength={5}
-                  className="uppercase"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Short identifier used for task IDs (e.g. MAS-123)
-                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="project-desc">Description (optional)</Label>
@@ -201,12 +181,9 @@ export default function ProjectsPage() {
                       )}
                     </div>
                     <CardTitle className="mt-3 text-base">{project.name}</CardTitle>
-                    {project.key && (
-                      <span className="text-xs font-mono text-muted-foreground">{project.key}</span>
-                    )}
-                    {project.description && (
+                    {project.createdAt && (
                       <CardDescription className="line-clamp-2 text-xs">
-                        {project.description}
+                        Created {format(new Date(project.createdAt), 'MMM d, yyyy')}
                       </CardDescription>
                     )}
                   </CardHeader>
@@ -214,7 +191,7 @@ export default function ProjectsPage() {
                     <div className="flex items-center gap-4 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1">
                         <Calendar className="h-3 w-3" />
-                        {format(new Date(project.created_at), 'MMM d, yyyy')}
+                        {format(new Date(project.createdAt || Date.now()), 'MMM d, yyyy')}
                       </span>
                     </div>
                   </CardContent>

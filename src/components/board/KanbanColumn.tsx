@@ -1,7 +1,12 @@
-import { type Task, type WorkflowStatus } from '@/stores/workflowStore';
+import { useState } from 'react';
+import { useWorkflowStore, type Task, type WorkflowStatus } from '@/stores/workflowStore';
+import { useProjectStore } from '@/stores/projectStore';
 import { TaskCard } from './TaskCard';
 import { Droppable, Draggable } from '@hello-pangea/dnd';
 import { cn } from '@/lib/utils';
+import { Plus, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 const categoryColors: Record<string, string> = {
   BACKLOG: 'border-t-muted-foreground/30',
@@ -27,6 +32,32 @@ interface KanbanColumnProps {
 }
 
 export function KanbanColumn({ status, tasks }: KanbanColumnProps) {
+  const { createTask } = useWorkflowStore();
+  const { permissions } = useProjectStore();
+  const [isCreating, setIsCreating] = useState(false);
+  const [newTaskTitle, setNewTaskTitle] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleCreateTask = async () => {
+    if (!newTaskTitle.trim()) {
+      setIsCreating(false);
+      return;
+    }
+    setIsSubmitting(true);
+    await createTask(newTaskTitle.trim(), status.id);
+    setNewTaskTitle('');
+    setIsSubmitting(false);
+    setIsCreating(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') handleCreateTask();
+    if (e.key === 'Escape') {
+      setIsCreating(false);
+      setNewTaskTitle('');
+    }
+  };
+
   return (
     <div
       className={cn(
@@ -74,6 +105,40 @@ export function KanbanColumn({ status, tasks }: KanbanColumnProps) {
               </Draggable>
             ))}
             {provided.placeholder}
+            <div className="pt-2 pb-1 px-1">
+              {isCreating ? (
+                <div className="flex flex-col gap-2 rounded-md border bg-card p-2 shadow-sm">
+                  <Input 
+                    autoFocus
+                    placeholder="What needs to be done?" 
+                    value={newTaskTitle}
+                    onChange={(e) => setNewTaskTitle(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    disabled={isSubmitting}
+                    className="h-8 text-sm"
+                  />
+                  <div className="flex items-center justify-end gap-1">
+                     <Button variant="ghost" size="sm" className="h-6 w-6 p-0 hover:bg-muted" onClick={() => setIsCreating(false)} disabled={isSubmitting}>
+                       <X className="h-3.5 w-3.5" />
+                     </Button>
+                     <Button size="sm" className="h-6 px-2 text-xs" onClick={handleCreateTask} disabled={isSubmitting || !newTaskTitle.trim()}>
+                       Add
+                     </Button>
+                  </div>
+                </div>
+              ) : (
+                permissions.includes('CREATE_TASK') && (
+                  <Button 
+                    variant="ghost" 
+                    className="w-full justify-start text-muted-foreground hover:bg-muted font-normal h-8 px-2 text-xs"
+                    onClick={() => setIsCreating(true)}
+                  >
+                    <Plus className="mr-2 h-3.5 w-3.5" />
+                    Create
+                  </Button>
+                )
+              )}
+            </div>
           </div>
         )}
       </Droppable>

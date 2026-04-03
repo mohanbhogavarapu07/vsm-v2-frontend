@@ -8,7 +8,7 @@ export function usePermissions() {
   const currentMember = members.find((m) => m.user_id === user?.id);
   const currentRole = roles.find((r) => r.id === currentMember?.role_id);
   const accessLevel: AccessLevel | null = currentRole?.access_level || null;
-  const isProjectOwner = currentProject?.owner_id === user?.id;
+  const isProjectOwner = false;
 
   const isHighAccess = accessLevel === 'HIGH' || isProjectOwner;
   const isMediumAccess = accessLevel === 'MEDIUM' || isHighAccess;

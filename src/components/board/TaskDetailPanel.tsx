@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
-import { api } from '@/lib/api';
+import { useParams } from 'react-router-dom';
 import { useWorkflowStore } from '@/stores/workflowStore';
+import { useProjectStore } from '@/stores/projectStore';
+import { api } from '@/lib/api';
 import { motion } from 'framer-motion';
 import { X, GitCommit, GitPullRequest, CheckCircle2, XCircle, Bot, Activity, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -15,17 +17,28 @@ interface TaskDetailPanelProps {
 }
 
 export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
+  const { projectId } = useParams<{ projectId: string }>();
+  const { currentTeamId, ensureDefaultTeam } = useProjectStore();
   const task = useWorkflowStore((s) => s.tasks.find((t) => t.id === taskId));
   const [activities, setActivities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setLoading(true);
-    api.getTaskActivity(taskId)
-      .then(setActivities)
-      .catch(() => setActivities([]))
-      .finally(() => setLoading(false));
-  }, [taskId]);
+    const load = async () => {
+      setLoading(true);
+      try {
+        if (!projectId) return setActivities([]);
+        const teamId = currentTeamId || (await ensureDefaultTeam(projectId));
+        const data = await api.getTaskActivity(taskId, teamId);
+        setActivities(data || []);
+      } catch {
+        setActivities([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    void load();
+  }, [taskId, projectId, currentTeamId, ensureDefaultTeam]);
 
   if (!task) return null;
 
@@ -82,7 +95,7 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
               <div>
                 <h3 className="mb-1 text-xs font-semibold uppercase text-muted-foreground">Created</h3>
                 <p className="text-sm text-foreground">
-                  {new Date(task.created_at).toLocaleDateString()}
+                  {task.created_at ? new Date(task.created_at).toLocaleDateString() : '—'}
                 </p>
               </div>
             </div>
