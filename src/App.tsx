@@ -15,6 +15,7 @@ import ProjectsPage from './pages/ProjectsPage';
 import ProjectSetupPage from './pages/ProjectSetupPage';
 import TeamPage from './pages/TeamPage';
 import ResetPassword from './pages/ResetPassword';
+import AcceptInvitePage from './pages/AcceptInvitePage';
 import NotFound from './pages/NotFound';
 import { Loader2 } from 'lucide-react';
 
@@ -50,6 +51,7 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/accept-invite/:invitationId" element={<AcceptInvitePage />} />
           <Route
             path="/*"
             element={
