@@ -1,14 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { useProjectStore, PREDEFINED_PERMISSIONS, Role } from '@/stores/projectStore';
+import { useProjectStore, ACCESS_LEVELS, Role, AccessLevel } from '@/stores/projectStore';
 import { usePermissions } from '@/hooks/usePermissions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
@@ -17,14 +15,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -40,7 +30,6 @@ import {
   Loader2,
   Mail,
   MoreHorizontal,
-  Pencil,
   Plus,
   Shield,
   ShieldCheck,
@@ -81,10 +70,10 @@ export default function TeamPage() {
   const [showAddRole, setShowAddRole] = useState(false);
   const [newRoleName, setNewRoleName] = useState('');
   const [newRoleDesc, setNewRoleDesc] = useState('');
+  const [newRoleAccess, setNewRoleAccess] = useState<AccessLevel>('LOW');
   const [creatingRole, setCreatingRole] = useState(false);
   const [deleteRoleId, setDeleteRoleId] = useState<string | null>(null);
   const [removeMemberId, setRemoveMemberId] = useState<string | null>(null);
-  const [editingPermissions, setEditingPermissions] = useState<string | null>(null);
 
   useEffect(() => {
     if (projectId) {
@@ -112,34 +101,39 @@ export default function TeamPage() {
       await createRole(projectId, {
         name: newRoleName.trim(),
         description: newRoleDesc.trim() || undefined,
-        permissions: ['read'],
+        access_level: newRoleAccess,
       });
       setNewRoleName('');
       setNewRoleDesc('');
+      setNewRoleAccess('LOW');
       setShowAddRole(false);
     } catch {} finally {
       setCreatingRole(false);
     }
   };
 
-  const handleTogglePermission = async (role: Role, permKey: string) => {
-    if (!projectId) return;
-    const current = role.permissions || [];
-    const updated = current.includes(permKey)
-      ? current.filter((p) => p !== permKey)
-      : [...current, permKey];
-    await updateRole(projectId, role.id, { permissions: updated });
-  };
-
   const canManage = canManageTeam || isProjectOwner;
   const canEditRoles = canManageRoles || isProjectOwner;
+
+  const getAccessBadge = (level: AccessLevel) => {
+    const colorClass =
+      level === 'HIGH' ? 'border-destructive/30 text-destructive bg-destructive/10' :
+      level === 'MEDIUM' ? 'border-warning/30 text-warning bg-warning/10' :
+      'border-muted-foreground/30 text-muted-foreground bg-muted';
+    const info = ACCESS_LEVELS.find((a) => a.value === level);
+    return (
+      <Badge variant="outline" className={cn('text-xs', colorClass)}>
+        {info?.label || level}
+      </Badge>
+    );
+  };
 
   return (
     <div className="mx-auto max-w-5xl p-6 lg:p-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-foreground">Team Management</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Manage roles, permissions, and team members
+          Manage roles, access levels, and team members
         </p>
       </div>
 
@@ -149,13 +143,12 @@ export default function TeamPage() {
             <Users className="h-4 w-4" /> Members
           </TabsTrigger>
           <TabsTrigger value="roles" className="gap-2">
-            <Shield className="h-4 w-4" /> Roles & Permissions
+            <Shield className="h-4 w-4" /> Roles & Access
           </TabsTrigger>
         </TabsList>
 
         {/* Members Tab */}
         <TabsContent value="members" className="space-y-4">
-          {/* Invite form */}
           {canManage && (
             <Card>
               <CardHeader className="pb-3">
@@ -196,7 +189,6 @@ export default function TeamPage() {
             </Card>
           )}
 
-          {/* Members list */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
@@ -224,6 +216,7 @@ export default function TeamPage() {
                         </div>
                         <div className="flex items-center gap-2">
                           <Badge variant="secondary" className="text-xs">{memberRole?.name || '—'}</Badge>
+                          {memberRole && getAccessBadge(memberRole.access_level)}
                           <Badge
                             variant="outline"
                             className={cn(
@@ -289,7 +282,7 @@ export default function TeamPage() {
             <Card className="border-primary/30 bg-primary/5">
               <CardContent className="pt-4">
                 <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="space-y-1.5">
                       <Label>Role Name</Label>
                       <Input
@@ -307,6 +300,21 @@ export default function TeamPage() {
                         onChange={(e) => setNewRoleDesc(e.target.value)}
                       />
                     </div>
+                    <div className="space-y-1.5">
+                      <Label>Access Level</Label>
+                      <Select value={newRoleAccess} onValueChange={(v) => setNewRoleAccess(v as AccessLevel)}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {ACCESS_LEVELS.map((lvl) => (
+                            <SelectItem key={lvl.value} value={lvl.value}>
+                              {lvl.label} ({lvl.value})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                   <div className="flex gap-2">
                     <Button size="sm" onClick={handleAddRole} disabled={!newRoleName.trim() || creatingRole}>
@@ -322,67 +330,78 @@ export default function TeamPage() {
             </Card>
           )}
 
-          {/* Permission Matrix */}
+          {/* Roles List with Access Levels */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <ShieldCheck className="h-4 w-4 text-primary" />
-                Permission Matrix
+                Roles & Access Levels
               </CardTitle>
               <CardDescription>
-                Configure what each role can do across the project
+                Each role maps to an access level that controls capabilities across the project
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Legend */}
+              <div className="mb-4 rounded-lg border bg-muted/30 p-3">
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {ACCESS_LEVELS.map((lvl) => (
+                    <div key={lvl.value} className="flex items-start gap-2">
+                      {getAccessBadge(lvl.value)}
+                      <p className="text-xs text-muted-foreground">{lvl.description}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               {roles.length === 0 ? (
-                <p className="text-center py-8 text-sm text-muted-foreground">Create roles to configure permissions</p>
+                <p className="text-center py-8 text-sm text-muted-foreground">Create roles to manage team access</p>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b">
-                        <th className="py-3 pr-4 text-left font-medium text-muted-foreground min-w-[180px]">Permission</th>
-                        {roles.map((role) => (
-                          <th key={role.id} className="px-3 py-3 text-center min-w-[100px]">
-                            <div className="flex flex-col items-center gap-1">
-                              <span className="text-xs font-semibold text-foreground">{role.name}</span>
-                              {canEditRoles && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-5 w-5 text-destructive/60 hover:text-destructive"
-                                  onClick={() => setDeleteRoleId(role.id)}
-                                >
-                                  <Trash2 className="h-3 w-3" />
-                                </Button>
-                              )}
-                            </div>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {PREDEFINED_PERMISSIONS.map((perm) => (
-                        <tr key={perm.key} className="border-b border-border/50 hover:bg-muted/30">
-                          <td className="py-3 pr-4">
-                            <p className="font-medium text-foreground">{perm.label}</p>
-                            <p className="text-xs text-muted-foreground">{perm.description}</p>
-                          </td>
-                          {roles.map((role) => (
-                            <td key={role.id} className="px-3 py-3 text-center">
-                              <div className="flex justify-center">
-                                <Checkbox
-                                  checked={role.permissions?.includes(perm.key)}
-                                  onCheckedChange={() => handleTogglePermission(role, perm.key)}
-                                  disabled={!canEditRoles}
-                                />
-                              </div>
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="space-y-2">
+                  {roles.map((role) => (
+                    <div key={role.id} className="flex items-center justify-between rounded-lg border p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
+                          <Shield className="h-4 w-4 text-primary" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-foreground">{role.name}</p>
+                          {role.description && <p className="text-xs text-muted-foreground">{role.description}</p>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {canEditRoles ? (
+                          <Select
+                            value={role.access_level}
+                            onValueChange={(val) => projectId && updateRole(projectId, role.id, { access_level: val as AccessLevel })}
+                          >
+                            <SelectTrigger className="w-36 h-8 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {ACCESS_LEVELS.map((lvl) => (
+                                <SelectItem key={lvl.value} value={lvl.value}>
+                                  {lvl.label} ({lvl.value})
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          getAccessBadge(role.access_level)
+                        )}
+                        {canEditRoles && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive/60 hover:text-destructive"
+                            onClick={() => setDeleteRoleId(role.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </CardContent>
@@ -390,23 +409,19 @@ export default function TeamPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Delete Role Confirm */}
       <AlertDialog open={!!deleteRoleId} onOpenChange={() => setDeleteRoleId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Role</AlertDialogTitle>
             <AlertDialogDescription>
-              This will remove the role and unassign it from all members. This action cannot be undone.
+              This will remove the role and unassign it from all members.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground"
-              onClick={() => {
-                if (deleteRoleId && projectId) deleteRole(projectId, deleteRoleId);
-                setDeleteRoleId(null);
-              }}
+              onClick={() => { if (deleteRoleId && projectId) deleteRole(projectId, deleteRoleId); setDeleteRoleId(null); }}
             >
               Delete
             </AlertDialogAction>
@@ -414,23 +429,19 @@ export default function TeamPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Remove Member Confirm */}
       <AlertDialog open={!!removeMemberId} onOpenChange={() => setRemoveMemberId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Remove Member</AlertDialogTitle>
             <AlertDialogDescription>
-              This will remove the member from the project. They will lose all access.
+              This will remove the member from the project.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground"
-              onClick={() => {
-                if (removeMemberId && projectId) removeMember(projectId, removeMemberId);
-                setRemoveMemberId(null);
-              }}
+              onClick={() => { if (removeMemberId && projectId) removeMember(projectId, removeMemberId); setRemoveMemberId(null); }}
             >
               Remove
             </AlertDialogAction>

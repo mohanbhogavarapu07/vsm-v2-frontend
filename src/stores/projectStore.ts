@@ -1,19 +1,20 @@
 import { create } from 'zustand';
 import { api } from '@/lib/api';
 
-export interface Permission {
-  id: string;
-  key: string;
-  label: string;
-  description?: string;
-}
+export type AccessLevel = 'HIGH' | 'MEDIUM' | 'LOW';
+
+export const ACCESS_LEVELS: { value: AccessLevel; label: string; description: string; color: string }[] = [
+  { value: 'HIGH', label: 'Admin', description: 'Full control — create, delete, update everything, manage team & AI', color: 'text-destructive' },
+  { value: 'MEDIUM', label: 'Contributor', description: 'Modify tasks, review, update progress, assign tasks', color: 'text-warning' },
+  { value: 'LOW', label: 'Viewer', description: 'Read-only access to tasks, boards, and project data', color: 'text-muted-foreground' },
+];
 
 export interface Role {
   id: string;
   project_id: string;
   name: string;
   description?: string;
-  permissions: string[];
+  access_level: AccessLevel;
   created_at: string;
 }
 
@@ -30,6 +31,13 @@ export interface TeamMember {
   joined_at?: string;
 }
 
+export interface WorkflowStage {
+  id: string;
+  name: string;
+  stage_order: number;
+  is_terminal: boolean;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -41,29 +49,14 @@ export interface Project {
   setup_complete: boolean;
 }
 
-// Predefined permission options the Scrum can choose from
-export const PREDEFINED_PERMISSIONS: Permission[] = [
-  { id: 'read', key: 'read', label: 'Read', description: 'View tasks, boards, and project data' },
-  { id: 'edit', key: 'edit', label: 'Edit', description: 'Edit tasks, descriptions, and details' },
-  { id: 'create', key: 'create', label: 'Create', description: 'Create new tasks and items' },
-  { id: 'delete', key: 'delete', label: 'Delete', description: 'Delete tasks and items' },
-  { id: 'manage_team', key: 'manage_team', label: 'Manage Team', description: 'Invite, remove, and manage team members' },
-  { id: 'assign_tasks', key: 'assign_tasks', label: 'Assign Tasks', description: 'Assign and reassign tasks to members' },
-  { id: 'manage_roles', key: 'manage_roles', label: 'Manage Roles', description: 'Create, edit, and delete roles' },
-  { id: 'manage_workflows', key: 'manage_workflows', label: 'Manage Workflows', description: 'Configure workflow statuses and transitions' },
-  { id: 'view_analytics', key: 'view_analytics', label: 'View Analytics', description: 'Access project analytics and reports' },
-  { id: 'manage_ai', key: 'manage_ai', label: 'Manage AI', description: 'Configure AI decisions and automation' },
-  { id: 'approve_ai', key: 'approve_ai', label: 'Approve AI Decisions', description: 'Approve or reject AI-suggested actions' },
-  { id: 'admin', key: 'admin', label: 'Full Admin', description: 'Full administrative access to the project' },
-];
-
-type SetupStep = 'create' | 'roles' | 'permissions' | 'invite' | 'complete';
+type SetupStep = 'roles' | 'workflow' | 'invite' | 'complete';
 
 interface ProjectState {
   projects: Project[];
   currentProject: Project | null;
   roles: Role[];
   members: TeamMember[];
+  workflowStages: WorkflowStage[];
   loading: boolean;
   error: string | null;
 
@@ -78,7 +71,7 @@ interface ProjectState {
 
   // Roles
   fetchRoles: (projectId: string) => Promise<void>;
-  createRole: (projectId: string, data: { name: string; description?: string; permissions: string[] }) => Promise<Role>;
+  createRole: (projectId: string, data: { name: string; description?: string; access_level: AccessLevel }) => Promise<Role>;
   updateRole: (projectId: string, roleId: string, data: Partial<Role>) => Promise<void>;
   deleteRole: (projectId: string, roleId: string) => Promise<void>;
 
@@ -87,6 +80,13 @@ interface ProjectState {
   inviteMember: (projectId: string, email: string, roleId: string) => Promise<void>;
   updateMemberRole: (projectId: string, memberId: string, roleId: string) => Promise<void>;
   removeMember: (projectId: string, memberId: string) => Promise<void>;
+
+  // Workflow stages
+  fetchWorkflowStages: (projectId: string) => Promise<void>;
+  createWorkflowStage: (projectId: string, data: { name: string; stage_order: number; is_terminal?: boolean }) => Promise<WorkflowStage>;
+  updateWorkflowStage: (projectId: string, stageId: string, data: Partial<WorkflowStage>) => Promise<void>;
+  deleteWorkflowStage: (projectId: string, stageId: string) => Promise<void>;
+  reorderWorkflowStages: (projectId: string, stages: { id: string; stage_order: number }[]) => Promise<void>;
 }
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
@@ -94,9 +94,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   currentProject: null,
   roles: [],
   members: [],
+  workflowStages: [],
   loading: false,
   error: null,
-  setupStep: 'create',
+  setupStep: 'roles',
 
   setSetupStep: (step) => set({ setupStep: step }),
 
@@ -207,6 +208,68 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     try {
       await api.removeMember(projectId, memberId);
       set((state) => ({ members: state.members.filter((m) => m.id !== memberId) }));
+    } catch (e: any) {
+      set({ error: e.message });
+    }
+  },
+
+  fetchWorkflowStages: async (projectId) => {
+    try {
+      const data = await api.getProjectWorkflowStages(projectId);
+      set({ workflowStages: data });
+    } catch (e: any) {
+      set({ error: e.message });
+    }
+  },
+
+  createWorkflowStage: async (projectId, data) => {
+    set({ loading: true, error: null });
+    try {
+      const stage = await api.createWorkflowStage(projectId, data);
+      set((state) => ({
+        workflowStages: [...state.workflowStages, stage].sort((a, b) => a.stage_order - b.stage_order),
+        loading: false,
+      }));
+      return stage;
+    } catch (e: any) {
+      set({ error: e.message, loading: false });
+      throw e;
+    }
+  },
+
+  updateWorkflowStage: async (projectId, stageId, data) => {
+    try {
+      await api.updateWorkflowStage(projectId, stageId, data);
+      set((state) => ({
+        workflowStages: state.workflowStages
+          .map((s) => (s.id === stageId ? { ...s, ...data } : s))
+          .sort((a, b) => a.stage_order - b.stage_order),
+      }));
+    } catch (e: any) {
+      set({ error: e.message });
+    }
+  },
+
+  deleteWorkflowStage: async (projectId, stageId) => {
+    try {
+      await api.deleteWorkflowStage(projectId, stageId);
+      set((state) => ({ workflowStages: state.workflowStages.filter((s) => s.id !== stageId) }));
+    } catch (e: any) {
+      set({ error: e.message });
+    }
+  },
+
+  reorderWorkflowStages: async (projectId, stages) => {
+    try {
+      await api.reorderWorkflowStages(projectId, stages);
+      set((state) => ({
+        workflowStages: state.workflowStages
+          .map((s) => {
+            const update = stages.find((u) => u.id === s.id);
+            return update ? { ...s, stage_order: update.stage_order } : s;
+          })
+          .sort((a, b) => a.stage_order - b.stage_order),
+      }));
     } catch (e: any) {
       set({ error: e.message });
     }
