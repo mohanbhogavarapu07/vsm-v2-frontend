@@ -87,12 +87,24 @@ export const api = {
   // Roles
   getProjectRoles: (projectId: string) =>
     apiRequest<any[]>(`/api/projects/${projectId}/roles`),
-  createRole: (projectId: string, data: { name: string; description?: string; permissions: string[] }) =>
+  createRole: (projectId: string, data: { name: string; description?: string; access_level: string }) =>
     apiRequest<any>(`/api/projects/${projectId}/roles`, { method: 'POST', body: JSON.stringify(data) }),
   updateRole: (projectId: string, roleId: string, data: any) =>
     apiRequest<any>(`/api/projects/${projectId}/roles/${roleId}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteRole: (projectId: string, roleId: string) =>
     apiRequest<any>(`/api/projects/${projectId}/roles/${roleId}`, { method: 'DELETE' }),
+
+  // Workflow Stages
+  getProjectWorkflowStages: (projectId: string) =>
+    apiRequest<any[]>(`/api/projects/${projectId}/workflows`),
+  createWorkflowStage: (projectId: string, data: { name: string; stage_order: number; is_terminal?: boolean }) =>
+    apiRequest<any>(`/api/projects/${projectId}/workflows`, { method: 'POST', body: JSON.stringify(data) }),
+  updateWorkflowStage: (projectId: string, stageId: string, data: any) =>
+    apiRequest<any>(`/api/projects/${projectId}/workflows/${stageId}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteWorkflowStage: (projectId: string, stageId: string) =>
+    apiRequest<any>(`/api/projects/${projectId}/workflows/${stageId}`, { method: 'DELETE' }),
+  reorderWorkflowStages: (projectId: string, stages: { id: string; stage_order: number }[]) =>
+    apiRequest<any>(`/api/projects/${projectId}/workflows/reorder`, { method: 'POST', body: JSON.stringify({ stages }) }),
 
   // Team Members
   getProjectMembers: (projectId: string) =>

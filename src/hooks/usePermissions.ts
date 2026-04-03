@@ -1,4 +1,4 @@
-import { useProjectStore } from '@/stores/projectStore';
+import { useProjectStore, AccessLevel } from '@/stores/projectStore';
 import { useAuthStore } from '@/stores/authStore';
 
 export function usePermissions() {
@@ -7,30 +7,31 @@ export function usePermissions() {
 
   const currentMember = members.find((m) => m.user_id === user?.id);
   const currentRole = roles.find((r) => r.id === currentMember?.role_id);
-
-  const hasPermission = (permission: string): boolean => {
-    if (!currentRole) return false;
-    if (currentRole.permissions.includes('admin')) return true;
-    return currentRole.permissions.includes(permission);
-  };
-
+  const accessLevel: AccessLevel | null = currentRole?.access_level || null;
   const isProjectOwner = currentProject?.owner_id === user?.id;
+
+  const isHighAccess = accessLevel === 'HIGH' || isProjectOwner;
+  const isMediumAccess = accessLevel === 'MEDIUM' || isHighAccess;
+  const isLowAccess = accessLevel === 'LOW' || isMediumAccess;
 
   return {
     currentMember,
     currentRole,
-    hasPermission,
+    accessLevel,
     isProjectOwner,
-    canRead: hasPermission('read') || isProjectOwner,
-    canEdit: hasPermission('edit') || isProjectOwner,
-    canCreate: hasPermission('create') || isProjectOwner,
-    canDelete: hasPermission('delete') || isProjectOwner,
-    canManageTeam: hasPermission('manage_team') || isProjectOwner,
-    canAssignTasks: hasPermission('assign_tasks') || isProjectOwner,
-    canManageRoles: hasPermission('manage_roles') || isProjectOwner,
-    canManageWorkflows: hasPermission('manage_workflows') || isProjectOwner,
-    canViewAnalytics: hasPermission('view_analytics') || isProjectOwner,
-    canManageAI: hasPermission('manage_ai') || isProjectOwner,
-    canApproveAI: hasPermission('approve_ai') || isProjectOwner,
+    // HIGH = full admin
+    canManageTeam: isHighAccess,
+    canManageRoles: isHighAccess,
+    canManageWorkflows: isHighAccess,
+    canManageAI: isHighAccess,
+    canApproveAI: isHighAccess,
+    canDelete: isHighAccess,
+    canViewAnalytics: isHighAccess,
+    // MEDIUM = contributor
+    canEdit: isMediumAccess,
+    canCreate: isMediumAccess,
+    canAssignTasks: isMediumAccess,
+    // LOW = viewer
+    canRead: isLowAccess,
   };
 }
