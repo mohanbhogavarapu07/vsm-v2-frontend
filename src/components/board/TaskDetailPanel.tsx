@@ -9,6 +9,13 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 
 interface TaskDetailPanelProps {
@@ -18,8 +25,9 @@ interface TaskDetailPanelProps {
 
 export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
   const { projectId } = useParams<{ projectId: string }>();
-  const { currentTeamId, ensureDefaultTeam } = useProjectStore();
-  const task = useWorkflowStore((s) => s.tasks.find((t) => t.id === taskId));
+  const { currentTeamId, ensureDefaultTeam, members } = useProjectStore();
+  const { tasks, updateTaskAssignee } = useWorkflowStore();
+  const task = tasks.find((t) => t.id === taskId);
   const [activities, setActivities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -84,7 +92,20 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
               </div>
               <div>
                 <h3 className="mb-1 text-xs font-semibold uppercase text-muted-foreground">Assignee</h3>
-                <p className="text-sm text-foreground">{task.assignee_name || 'Unassigned'}</p>
+                <Select
+                  value={task.assignee_id || 'unassigned'}
+                  onValueChange={(val) => updateTaskAssignee(task.id, val === 'unassigned' ? null : val)}
+                >
+                  <SelectTrigger className="h-8 text-[13px] border-transparent -ml-3 hover:border-border transition-colors">
+                    <SelectValue placeholder="Unassigned" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unassigned" className="text-muted-foreground italic">Unassigned</SelectItem>
+                    {members.map(m => (
+                      <SelectItem key={m.id} value={m.id}>{m.full_name || m.email}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               {task.priority && (
                 <div>

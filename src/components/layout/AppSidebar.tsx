@@ -13,7 +13,7 @@ import {
   FolderKanban,
   ArrowLeft,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -23,9 +23,21 @@ export function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
-  const { projectId } = useParams<{ projectId: string }>();
+  const { projectId, teamId } = useParams<{ projectId: string; teamId?: string }>();
   const { user, signOut } = useAuthStore();
-  const { currentProject, permissions } = useProjectStore();
+  const { currentProject, permissions, teams, fetchTeams, setCurrentTeamId } = useProjectStore();
+
+  useEffect(() => {
+    if (projectId) {
+      fetchTeams(projectId);
+    }
+  }, [projectId, fetchTeams]);
+
+  useEffect(() => {
+    if (teamId) {
+      setCurrentTeamId(teamId);
+    }
+  }, [teamId, setCurrentTeamId]);
 
   const hasPermission = (perm: string) => permissions.includes(perm);
 
@@ -36,17 +48,21 @@ export function AppSidebar() {
     .join('')
     .toUpperCase() || user?.email?.[0]?.toUpperCase() || '?';
 
-  const projectNav = projectId
-    ? [
-        { path: `/projects/${projectId}/board`, icon: KanbanSquare, label: 'Board' },
-        { path: `/projects/${projectId}/activity`, icon: Activity, label: 'AI Activity' },
-        { path: `/projects/${projectId}/decisions`, icon: Bot, label: 'AI Decisions' },
+  let projectNav: any[] = [];
+  if (projectId) {
+    if (teamId) {
+      projectNav = [
+        { path: `/projects/${projectId}/teams/${teamId}/board`, icon: KanbanSquare, label: 'Board' },
+        { path: `/projects/${projectId}/teams/${teamId}/activity`, icon: Activity, label: 'AI Activity' },
+        { path: `/projects/${projectId}/teams/${teamId}/decisions`, icon: Bot, label: 'AI Decisions' },
         ...(hasPermission('MANAGE_TEAM') ? [
-          { path: `/projects/${projectId}/team`, icon: Users, label: 'Team' },
-          { path: `/projects/${projectId}/settings`, icon: Settings, label: 'Settings' },
+          { path: `/projects/${projectId}/teams/${teamId}/team`, icon: Users, label: 'Team Roles' },
+          { path: `/projects/${projectId}/teams/${teamId}/settings`, icon: Settings, label: 'Settings' },
         ] : []),
-      ]
-    : [];
+      ];
+    }
+    projectNav.push({ path: `/projects/${projectId}/setup`, icon: Settings, label: 'Manage Setup' });
+  }
 
   return (
     <aside
@@ -65,19 +81,41 @@ export function AppSidebar() {
         )}
       </div>
 
-      {/* Back to Projects */}
+      {/* Back to Projects & Team List */}
       {projectId && (
-        <button
-          onClick={() => navigate('/projects')}
-          className="flex items-center gap-2 border-b border-sidebar-border px-4 py-2.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3.5 w-3.5 shrink-0" />
-          {!collapsed && (
-            <span className="truncate">
-              {currentProject?.name || 'All Projects'}
-            </span>
+        <div className="border-b border-sidebar-border">
+          <button
+            onClick={() => navigate('/projects')}
+            className="flex w-full items-center gap-2 px-4 py-2.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="h-3.5 w-3.5 shrink-0" />
+            {!collapsed && (
+              <span className="truncate">
+                {currentProject?.name || 'All Projects'}
+              </span>
+            )}
+          </button>
+          
+          {!collapsed && teams.length > 0 && (
+            <div className="px-4 pb-3">
+              <p className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wider">Teams</p>
+              <div className="space-y-0.5">
+                {teams.map(team => (
+                  <button
+                    key={team.id}
+                    onClick={() => navigate(`/projects/${projectId}/teams/${team.id}/board`)}
+                    className={cn(
+                      'w-full text-left truncate text-xs px-2 py-1.5 rounded-md transition-colors',
+                      teamId === team.id ? 'bg-primary/10 text-primary font-medium' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                    )}
+                  >
+                    {team.name}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
-        </button>
+        </div>
       )}
 
       {/* Nav */}

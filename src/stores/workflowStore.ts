@@ -17,6 +17,8 @@ export interface Task {
   status_id?: string;
   status_name?: string;
   status_category?: string;
+  assignee_id?: string;
+  assignee_name?: string;
   priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   pr_status?: string;
   ci_status?: string;
@@ -76,10 +78,11 @@ interface WorkflowState {
   updateTaskStatus: (taskId: string, newStatusId: string) => Promise<void>;
   updateTaskSprint: (taskId: string, sprintId: string | null) => Promise<void>;
   createTask: (title: string, statusId?: string, sprintId?: string) => Promise<void>;
+  updateTaskAssignee: (taskId: string, assigneeId: string | null) => Promise<void>;
   deleteTask: (taskId: string) => Promise<void>;
 
   // Sprint CRUD
-  createSprint: (name: string, goal?: string) => Promise<Sprint | null>;
+  createSprint: (name: string, goal?: string, startDate?: string, endDate?: string) => Promise<Sprint | null>;
 
   // Sprint lifecycle (Jira-style)
   startSprint: (sprintId: string, data: { goal?: string; startDate?: string; endDate?: string }) => Promise<void>;
@@ -144,6 +147,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         status_id: t.currentStatusId ? String(t.currentStatusId) : undefined,
         status_name: t.currentStatus?.name,
         status_category: t.currentStatus?.category,
+        assignee_id: t.assigneeId ? String(t.assigneeId) : undefined,
         created_at: t.createdAt,
         updated_at: t.updatedAt,
       }));
@@ -266,6 +270,19 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     }
   },
 
+  updateTaskAssignee: async (taskId, assigneeId) => {
+    try {
+      const teamId = get().teamId;
+      if (!teamId) throw new Error('No team selected');
+      await api.updateTask(taskId, teamId, { assignee_id: assigneeId ? Number(assigneeId) : null });
+      set((state) => ({
+        tasks: state.tasks.map((t) => t.id === taskId ? { ...t, assignee_id: assigneeId || undefined } : t)
+      }));
+    } catch (e: any) {
+      set({ error: e.message });
+    }
+  },
+
   createTask: async (title, statusId, sprintId) => {
     try {
       const teamId = get().teamId;
@@ -300,11 +317,11 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   // SPRINT CRUD
   // ─────────────────────────────────────────────────────────────────────────
 
-  createSprint: async (name, goal) => {
+  createSprint: async (name, goal, startDate, endDate) => {
     try {
       const teamId = get().teamId;
       if (!teamId) throw new Error('No team selected');
-      const raw = await api.createSprint(teamId, { name, goal });
+      const raw = await api.createSprint(teamId, { name, goal, startDate, endDate });
       const sprint: Sprint = {
         id: String(raw.id),
         name: raw.name,
