@@ -40,7 +40,7 @@ import { api } from '@/lib/api';
 const STEPS = [
   { id: 'roles', label: 'Define Roles', icon: Shield, description: 'Create roles & assign access levels' },
   { id: 'workflow', label: 'Define Workflow', icon: Workflow, description: 'Set up task lifecycle stages' },
-  { id: 'invite', label: 'Invite Team', icon: UserPlus, description: 'Invite members and assign roles' },
+  { id: 'teams', label: 'Create Teams', icon: Users, description: 'Create and organize teams' },
 ] as const;
 
 type StepId = typeof STEPS[number]['id'];
@@ -66,16 +66,18 @@ export default function ProjectSetupPage() {
   const {
     currentProject,
     roles,
-    members,
     workflowStages,
+    teams,
+    currentTeamId,
     loading,
     error,
     fetchRoles,
     createRole,
     deleteRole,
     updateRole,
-    fetchMembers,
-    inviteMember,
+    fetchTeams,
+    createTeam,
+    updateTeamName,
     fetchWorkflowStages,
     createWorkflowStage,
     deleteWorkflowStage,
@@ -95,15 +97,18 @@ export default function ProjectSetupPage() {
   const [creatingStage, setCreatingStage] = useState(false);
   const [applyingPreset, setApplyingPreset] = useState(false);
 
-  // Invite state
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRoleId, setInviteRoleId] = useState('');
-  const [inviting, setInviting] = useState(false);
+  // Teams state
+  const [newTeamName, setNewTeamName] = useState('');
+  const [creatingTeam, setCreatingTeam] = useState(false);
+  const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
+  const [editTeamName, setEditTeamName] = useState('');
+
+  const visibleTeams = teams.filter(t => t.name !== 'Initial Team');
 
   useEffect(() => {
     if (projectId) {
       fetchRoles(projectId);
-      fetchMembers(projectId);
+      fetchTeams(projectId);
       fetchWorkflowStages(projectId);
       if (!currentProject) {
         api.getProject(projectId).then((p) => setCurrentProject(p)).catch(() => {});
@@ -187,24 +192,43 @@ export default function ProjectSetupPage() {
     await reorderWorkflowStages(projectId, updates);
   };
 
-  const handleInvite = async () => {
-    if (!inviteEmail.trim() || !inviteRoleId || !projectId) return;
-    setInviting(true);
+  const handleCreateTeam = async () => {
+    if (!newTeamName.trim() || !projectId || !currentTeamId) return;
+    setCreatingTeam(true);
     try {
-      await inviteMember(projectId, inviteEmail.trim(), inviteRoleId);
-      setInviteEmail('');
-      setInviteRoleId('');
+      if (teams.length === 1 && teams[0].name === 'Initial Team') {
+        await updateTeamName(teams[0].id, newTeamName.trim());
+        await fetchTeams(projectId);
+      } else {
+        await createTeam(projectId, { name: newTeamName.trim(), copyFromTeamId: currentTeamId });
+      }
+      setNewTeamName('');
     } catch {} finally {
-      setInviting(false);
+      setCreatingTeam(false);
     }
+  };
+
+  const handleUpdateTeamName = async (teamId: string) => {
+    if (!editTeamName.trim() || !projectId) return;
+    try {
+      await updateTeamName(teamId, editTeamName.trim());
+      setEditingTeamId(null);
+      setEditTeamName('');
+    } catch {}
   };
 
   const handleFinishSetup = async () => {
     if (!projectId) return;
     try {
-      navigate(`/projects/${projectId}/board`);
+      // route to the board of the first team found
+      const t = teams.length > 0 ? teams[0].id : currentTeamId;
+      if (t) {
+        navigate(`/projects/${projectId}/teams/${t}/board`);
+      } else {
+        navigate(`/projects/${projectId}`);
+      }
     } catch {
-      navigate(`/projects/${projectId}/board`);
+      navigate(`/projects/${projectId}`);
     }
   };
 
@@ -605,18 +629,18 @@ export default function ProjectSetupPage() {
               <Button variant="outline" onClick={() => setActiveStep('roles')}>
                 Back to Roles
               </Button>
-              <Button onClick={() => setActiveStep('invite')} disabled={!canProceedFromWorkflow}>
-                Continue to Invite
+              <Button onClick={() => setActiveStep('teams')} disabled={!canProceedFromWorkflow}>
+                Continue to Teams
                 <ChevronRight className="ml-1.5 h-4 w-4" />
               </Button>
             </div>
           </motion.div>
         )}
 
-        {/* STEP 3: INVITE */}
-        {activeStep === 'invite' && (
+        {/* STEP 3: TEAMS */}
+        {activeStep === 'teams' && (
           <motion.div
-            key="invite"
+            key="teams"
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
@@ -625,84 +649,75 @@ export default function ProjectSetupPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <UserPlus className="h-5 w-5 text-primary" />
-                  Invite Team Members
+                  <Users className="h-5 w-5 text-primary" />
+                  Create Teams
                 </CardTitle>
                 <CardDescription>
-                  Invite users by email and assign them a role. Access is determined by the role's access level.
+                  Organize your members into teams. Each team can have its own board and backlog.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="rounded-lg border bg-muted/30 p-4">
+                  <h4 className="text-sm font-medium mb-3">Add a New Team</h4>
                   <div className="flex flex-col sm:flex-row gap-3">
                     <div className="flex-1 space-y-1.5">
-                      <Label htmlFor="invite-email">Email Address</Label>
-                      <div className="relative">
-                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                          id="invite-email"
-                          type="email"
-                          placeholder="colleague@company.com"
-                          value={inviteEmail}
-                          onChange={(e) => setInviteEmail(e.target.value)}
-                          className="pl-9"
-                        />
-                      </div>
-                    </div>
-                    <div className="sm:w-48 space-y-1.5">
-                      <Label>Role</Label>
-                      <Select value={inviteRoleId} onValueChange={setInviteRoleId}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select role" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {roles.map((role) => (
-                            <SelectItem key={role.id} value={role.id}>
-                              <span className="flex items-center gap-2">
-                                {role.name}
-                                <span className="text-[10px] text-muted-foreground">({role.access_level})</span>
-                              </span>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <Label htmlFor="team-name">Team Name</Label>
+                      <Input
+                        id="team-name"
+                        placeholder="e.g. Frontend Team, Marketing..."
+                        value={newTeamName}
+                        onChange={(e) => setNewTeamName(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleCreateTeam()}
+                      />
                     </div>
                     <div className="flex items-end">
-                      <Button onClick={handleInvite} disabled={!inviteEmail.trim() || !inviteRoleId || inviting}>
-                        {inviting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <UserPlus className="mr-1.5 h-4 w-4" />}
-                        Invite
+                      <Button onClick={handleCreateTeam} disabled={!newTeamName.trim() || creatingTeam}>
+                        {creatingTeam ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Plus className="mr-1.5 h-4 w-4" />}
+                        Create Team
                       </Button>
                     </div>
                   </div>
                 </div>
 
-                {members.length > 0 && (
+                {visibleTeams.length > 0 && (
                   <div>
                     <h4 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
-                      <Users className="h-4 w-4" />
-                      Invited Members ({members.length})
+                      <FolderKanban className="h-4 w-4" />
+                      Project Teams ({visibleTeams.length})
                     </h4>
                     <div className="space-y-2">
-                      {members.map((member) => {
-                        const memberRole = roles.find((r) => r.id === member.role_id);
-                        return (
-                          <div key={member.id} className="flex items-center justify-between rounded-lg border bg-card p-3">
-                            <div className="flex items-center gap-3">
-                              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-sm font-medium text-primary">
-                                {member.full_name?.[0]?.toUpperCase() || member.email[0]?.toUpperCase()}
+                      {visibleTeams.map((team) => (
+                        <div key={team.id} className="flex items-center justify-between rounded-lg border bg-card p-3">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                              <Users className="h-4 w-4" />
+                            </div>
+                            {editingTeamId === team.id ? (
+                              <div className="flex items-center gap-2">
+                                <Input 
+                                  value={editTeamName} 
+                                  onChange={(e) => setEditTeamName(e.target.value)}
+                                  className="h-8"
+                                  autoFocus
+                                  onKeyDown={(e) => e.key === 'Enter' && handleUpdateTeamName(team.id)}
+                                />
+                                <Button size="sm" onClick={() => handleUpdateTeamName(team.id)}>Save</Button>
+                                <Button size="sm" variant="ghost" onClick={() => setEditingTeamId(null)}>Cancel</Button>
                               </div>
+                            ) : (
                               <div>
-                                <p className="text-sm font-medium text-foreground">{member.full_name || member.email}</p>
-                                <p className="text-xs text-muted-foreground">{member.email}</p>
+                                <p className="text-sm font-medium text-foreground">{team.name}</p>
+                                <p className="text-xs text-muted-foreground">Team ID: {team.id}</p>
                               </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Badge variant="secondary" className="text-xs">{memberRole?.name || 'No role'}</Badge>
-                              {memberRole && getAccessBadge(memberRole.access_level)}
-                            </div>
+                            )}
                           </div>
-                        );
-                      })}
+                          {editingTeamId !== team.id && (
+                            <Button variant="ghost" size="sm" onClick={() => { setEditingTeamId(team.id); setEditTeamName(team.name); }}>
+                              Rename
+                            </Button>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}

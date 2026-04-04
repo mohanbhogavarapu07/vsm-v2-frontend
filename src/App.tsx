@@ -62,11 +62,11 @@ const App = () => (
                   <Route element={<AppLayout />}>
                     <Route path="/projects" element={<ProjectsPage />} />
                     <Route path="/projects/:projectId/setup" element={<ProjectSetupPage />} />
-                    <Route path="/projects/:projectId/board" element={<Index />} />
-                    <Route path="/projects/:projectId/activity" element={<ActivityPage />} />
-                    <Route path="/projects/:projectId/decisions" element={<DecisionsPage />} />
-                    <Route path="/projects/:projectId/team" element={<TeamPage />} />
-                    <Route path="/projects/:projectId/settings" element={<SettingsPage />} />
+                    <Route path="/projects/:projectId/teams/:teamId/board" element={<Index />} />
+                    <Route path="/projects/:projectId/teams/:teamId/activity" element={<ActivityPage />} />
+                    <Route path="/projects/:projectId/teams/:teamId/decisions" element={<DecisionsPage />} />
+                    <Route path="/projects/:projectId/teams/:teamId/team" element={<TeamPage />} />
+                    <Route path="/projects/:projectId/teams/:teamId/settings" element={<SettingsPage />} />
                     <Route path="/settings" element={<SettingsPage />} />
                   </Route>
                   <Route path="*" element={<NotFound />} />

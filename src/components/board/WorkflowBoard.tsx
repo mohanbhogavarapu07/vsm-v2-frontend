@@ -9,10 +9,18 @@ import { TaskDetailPanel } from './TaskDetailPanel';
 import { CompleteSprintModal } from './SprintModals';
 import {
   Loader2, AlertCircle, RefreshCw, Search, Plus, MoreHorizontal,
-  Layout, Code2, Presentation, Calendar, Share2, Zap, CheckCircle2,
+  Layout, Code2, Presentation, Calendar, Share2, Zap, CheckCircle2, Users,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { InviteMemberModal } from './InviteMemberModal';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 
 export function WorkflowBoard() {
@@ -26,9 +34,24 @@ export function WorkflowBoard() {
 
   const [currentTab, setCurrentTab] = useState<'summary' | 'backlog' | 'board' | 'code'>('board');
   const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
 
-  const activeSprint = sprints.find((s) => s.status === 'ACTIVE');
+  const activeSprints = sprints.filter((s) => s.status === 'ACTIVE');
   const plannedSprints = sprints.filter((s) => s.status === 'PLANNED');
+
+  const [viewedSprintId, setViewedSprintId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!viewedSprintId && activeSprints.length > 0) {
+      setViewedSprintId(activeSprints[0].id);
+    } else if (activeSprints.length === 0) {
+      setViewedSprintId(null);
+    } else if (viewedSprintId && !activeSprints.some(s => s.id === viewedSprintId)) {
+      setViewedSprintId(activeSprints[0].id);
+    }
+  }, [activeSprints, viewedSprintId]);
+
+  const activeSprint = activeSprints.find((s) => s.id === viewedSprintId) || activeSprints[0];
 
   // Tasks in the active sprint (for kanban board view)
   const activeSprintTasks = activeSprint
@@ -103,16 +126,32 @@ export function WorkflowBoard() {
 
         {/* Title + actions */}
         <div className="flex items-center justify-between px-6 mb-3 mt-1">
-          <div>
-            <h1 className="text-xl font-semibold text-foreground">
-              {currentTab === 'board' && activeSprint
-                ? `Board — ${activeSprint.name}`
-                : currentTab === 'backlog'
-                ? 'Backlog'
-                : 'Sprint Board'}
-            </h1>
-            {activeSprint?.goal && currentTab === 'board' && (
-              <p className="text-xs text-muted-foreground mt-0.5 italic">{activeSprint.goal}</p>
+          <div className="flex items-center gap-3">
+            <div>
+              <h1 className="text-xl font-semibold text-foreground">
+                {currentTab === 'board' && activeSprint
+                  ? `Board — ${activeSprint.name}`
+                  : currentTab === 'backlog'
+                  ? 'Backlog'
+                  : 'Sprint Board'}
+              </h1>
+              {activeSprint?.goal && currentTab === 'board' && (
+                <p className="text-xs text-muted-foreground mt-0.5 italic">{activeSprint.goal}</p>
+              )}
+            </div>
+            {currentTab === 'board' && activeSprints.length > 1 && (
+              <Select value={viewedSprintId || undefined} onValueChange={setViewedSprintId}>
+                <SelectTrigger className="h-8 w-48 text-sm">
+                  <SelectValue placeholder="Select Sprint" />
+                </SelectTrigger>
+                <SelectContent>
+                  {activeSprints.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             )}
           </div>
 
@@ -169,6 +208,13 @@ export function WorkflowBoard() {
           {permissions.includes('MANAGE_TEAM') && (
             <Button variant="ghost" size="icon" className="h-9 w-9 mb-[-1px] text-muted-foreground rounded-none">
               <Plus className="h-4 w-4" />
+            </Button>
+          )}
+          <div className="flex-1" />
+          {permissions.includes('MANAGE_TEAM') && (
+            <Button variant="outline" size="sm" className="h-8 shadow-sm mr-6" onClick={() => setShowInviteModal(true)}>
+              <Users className="h-3.5 w-3.5 mr-1.5" />
+              Invite Team Members
             </Button>
           )}
         </div>
@@ -270,6 +316,15 @@ export function WorkflowBoard() {
           incompleteTasks={incompleteTasks}
           plannedSprints={plannedSprints}
           onClose={() => setShowCompleteModal(false)}
+        />
+      )}
+
+      {/* ── Invite Member Modal ────────────────────────────────────────── */}
+      {projectId && (
+        <InviteMemberModal
+          open={showInviteModal}
+          onOpenChange={setShowInviteModal}
+          projectId={projectId}
         />
       )}
     </div>
