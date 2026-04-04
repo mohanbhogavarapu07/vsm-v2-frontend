@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
 import { useWorkflowStore } from '@/stores/workflowStore';
+import { useProjectStore } from '@/stores/projectStore';
 
 interface AIDecisionCardProps {
   decision: AIDecision;
@@ -22,6 +23,8 @@ export function AIDecisionCard({ decision, onAction }: AIDecisionCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [acting, setActing] = useState(false);
   const teamId = useWorkflowStore((s) => s.teamId);
+  const { permissions } = useProjectStore();
+  const canApprove = permissions.includes('MANAGE_TEAM');
 
   const handleApprove = async () => {
     setActing(true);
@@ -108,10 +111,21 @@ export function AIDecisionCard({ decision, onAction }: AIDecisionCardProps) {
           {/* Approval buttons */}
           {decision.status === 'PENDING_APPROVAL' && (
             <div className="mt-3 flex gap-2">
-              <Button size="sm" onClick={handleApprove} disabled={acting}>
+              <Button 
+                size="sm" 
+                onClick={handleApprove} 
+                disabled={acting || !canApprove}
+                className={!canApprove ? "opacity-50 cursor-not-allowed" : ""}
+              >
                 <Check className="mr-1 h-3 w-3" /> Approve
               </Button>
-              <Button size="sm" variant="outline" onClick={handleReject} disabled={acting}>
+              <Button 
+                size="sm" 
+                variant="outline" 
+                onClick={handleReject} 
+                disabled={acting || !canApprove}
+                className={!canApprove ? "opacity-50 cursor-not-allowed" : ""}
+              >
                 <X className="mr-1 h-3 w-3" /> Reject
               </Button>
             </div>

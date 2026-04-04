@@ -2,7 +2,13 @@ import { create } from 'zustand';
 import { supabase } from '@/lib/supabase';
 
 interface AuthState {
-  user: { id: string; email?: string; name?: string; backendId?: string } | null;
+  user: { 
+    id: string; 
+    email?: string; 
+    name?: string; 
+    backendId?: string;
+    user_metadata?: Record<string, any>;
+  } | null;
   loading: boolean;
   initialize: () => Promise<void>;
   signInWithGoogle: () => Promise<void>;
@@ -16,18 +22,55 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   initialize: async () => {
     try {
+      // 1. Initial manual check to show something fast
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
-        await get().syncWithBackend(session);
+        const storedBackendId = localStorage.getItem('vsm_user_id');
+        if (storedBackendId) {
+          const email = session.user.email;
+          const name = session.user.user_metadata?.full_name || session.user.email?.split('@')[0];
+          set({
+            user: { 
+              id: session.user.id, 
+              backendId: storedBackendId,
+              email, 
+              name 
+            },
+            loading: false,
+          });
+        } else {
+          // In session but no backendId (first time return from Google)
+          // We wait for onAuthStateChange to handle the sync (safer than dual-syncing)
+          // But we set loading: true to show the spinner while we wait
+          set({ loading: true });
+        }
       } else {
+        // No session at all
         set({ user: null, loading: false });
       }
 
-      // Listen for auth changes
+      // 2. Continuous listener for all auth events
       supabase.auth.onAuthStateChange(async (event, session) => {
-        if (event === 'SIGNED_IN' && session) {
-          await get().syncWithBackend(session);
+        if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
+          const storedBackendId = localStorage.getItem('vsm_user_id');
+          if (!storedBackendId) {
+            // New user or missing context - trigger sync!
+            await get().syncWithBackend(session);
+          } else {
+            // Already synced, just update local state if not already done
+            const email = session.user.email;
+            const name = session.user.user_metadata?.full_name || session.user.email?.split('@')[0];
+            set({
+              user: { 
+                id: session.user.id, 
+                backendId: storedBackendId,
+                email, 
+                name 
+              },
+              loading: false,
+            });
+          }
         } else if (event === 'SIGNED_OUT') {
           localStorage.removeItem('vsm_user_id');
           set({ user: null, loading: false });
@@ -44,7 +87,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.origin
+        redirectTo: window.location.href
       }
     });
     if (error) {
@@ -64,7 +107,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const response = await fetch(`${API_BASE}/auth/sync`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true'
         },
         body: JSON.stringify({
           email,

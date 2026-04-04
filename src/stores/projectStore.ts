@@ -41,7 +41,7 @@ export interface WorkflowStage {
 export interface Project {
   id: string;
   name: string;
-  setup_complete?: boolean;
+  setupComplete?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -79,6 +79,7 @@ interface ProjectState {
   setCurrentTeamId: (teamId: string | null) => void;
   createProject: (data: { name: string }) => Promise<Project>;
   ensureDefaultTeam: (projectId: string) => Promise<string>;
+  completeProjectSetup: (projectId: string) => Promise<void>;
 
   // Teams
   fetchTeams: (projectId: string) => Promise<void>;
@@ -213,6 +214,22 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     const newTeamId = String(created.id);
     await get().fetchPermissions(newTeamId);
     return newTeamId;
+  },
+
+  completeProjectSetup: async (projectId: string) => {
+    try {
+      await api.completeProjectSetup(projectId);
+      set((state) => ({
+        projects: state.projects.map(p => 
+          p.id === projectId ? { ...p, setupComplete: true } : p
+        ),
+        currentProject: state.currentProject?.id === projectId 
+          ? { ...state.currentProject, setupComplete: true } 
+          : state.currentProject
+      }));
+    } catch (e) {
+      console.error('Failed to complete project setup', e);
+    }
   },
 
   fetchTeams: async (projectId: string) => {

@@ -220,6 +220,7 @@ export default function ProjectSetupPage() {
   const handleFinishSetup = async () => {
     if (!projectId) return;
     try {
+      await useProjectStore.getState().completeProjectSetup(projectId);
       // route to the board of the first team found
       const t = teams.length > 0 ? teams[0].id : currentTeamId;
       if (t) {

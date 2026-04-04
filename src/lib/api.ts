@@ -3,10 +3,8 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 type QueryParams = Record<string, string | number | boolean | undefined | null>;
 
 function getVsmUserId(): string | null {
-  return (
-    (import.meta.env.VITE_VSM_USER_ID as string | undefined) ||
-    localStorage.getItem('vsm_user_id')
-  );
+  // Use ONLY localStorage to ensure we don't bypass authentication via env vars
+  return localStorage.getItem('vsm_user_id');
 }
 
 function buildQuery(params?: QueryParams): string {
@@ -23,6 +21,7 @@ function buildQuery(params?: QueryParams): string {
 async function apiRequest<T>(path: string, options: RequestInit = {}, query?: QueryParams): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    'ngrok-skip-browser-warning': 'true',
     ...(options.headers as Record<string, string> | undefined),
   };
 
@@ -51,6 +50,8 @@ export const api = {
   getProject: (projectId: string) => apiRequest<any>(`/projects/${projectId}`),
   createProject: (data: { name: string }) =>
     apiRequest<any>('/projects', { method: 'POST', body: JSON.stringify({ name: data.name }) }),
+  completeProjectSetup: (projectId: string) =>
+    apiRequest<any>(`/projects/${projectId}/complete-setup`, { method: 'POST' }),
 
   // ── Teams ──────────────────────────────────────────────────────────────────
   listTeams: (projectId: string) => apiRequest<any[]>(`/projects/${projectId}/teams`),
@@ -153,10 +154,16 @@ export const api = {
   myPermissions: (teamId: string) => apiRequest<{ permissions: string[] }>('/me/permissions', undefined, { team_id: teamId }),
 
   // ── GitHub App Integration ────────────────────────────────────────────────
-  getGitHubInstallUrl: () => apiRequest<{ url: string }>('/integrations/github/install'),
-  listGitHubRepositories: () => apiRequest<any[]>('/integrations/github/repositories'),
+  getGitHubInstallUrl: (teamId?: string) => apiRequest<{ url: string }>('/integrations/github/install', {}, { team_id: teamId }),
+  listGitHubRepositories: (teamId: string) => apiRequest<any[]>('/integrations/github/repositories', {}, { team_id: teamId }),
   linkGitHubRepository: (teamId: string, repositoryId: number) =>
     apiRequest<any>('/integrations/github/link', { method: 'POST', body: JSON.stringify({ repository_id: repositoryId }) }, { team_id: teamId }),
   getTeamGitHubRepositories: (teamId: string) =>
     apiRequest<any[]>(`/integrations/github/team/${teamId}`),
+  
+  // ── Public Invitations ────────────────────────────────────────────────────
+  getInvitationDetails: (invitationId: string) => 
+    apiRequest<any>(`/invitations/${invitationId}`),
+  acceptInvitation: (teamId: string, data: { invitation_id: number; name: string }) =>
+    apiRequest<any>(`/teams/${teamId}/invitations/accept`, { method: 'POST', body: JSON.stringify(data) }),
 };

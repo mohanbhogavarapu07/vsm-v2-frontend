@@ -92,7 +92,12 @@ export function KanbanColumn({ status, tasks }: KanbanColumnProps) {
             style={{ minHeight: 60 }}
           >
             {tasks.map((task, index) => (
-              <Draggable key={task.id} draggableId={task.id} index={index}>
+              <Draggable 
+                key={task.id} 
+                draggableId={task.id} 
+                index={index}
+                isDragDisabled={!permissions.includes('UPDATE_TASK')}
+              >
                 {(provided) => (
                   <div
                     ref={provided.innerRef}

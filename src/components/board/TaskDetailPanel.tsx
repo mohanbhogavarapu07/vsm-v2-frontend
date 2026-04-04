@@ -25,7 +25,7 @@ interface TaskDetailPanelProps {
 
 export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
   const { projectId } = useParams<{ projectId: string }>();
-  const { currentTeamId, ensureDefaultTeam, members } = useProjectStore();
+  const { currentTeamId, ensureDefaultTeam, members, permissions } = useProjectStore();
   const { tasks, updateTaskAssignee } = useWorkflowStore();
   const task = tasks.find((t) => t.id === taskId);
   const [activities, setActivities] = useState<any[]>([]);
@@ -95,8 +95,12 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
                 <Select
                   value={task.assignee_id || 'unassigned'}
                   onValueChange={(val) => updateTaskAssignee(task.id, val === 'unassigned' ? null : val)}
+                  disabled={!permissions.includes('UPDATE_TASK')}
                 >
-                  <SelectTrigger className="h-8 text-[13px] border-transparent -ml-3 hover:border-border transition-colors">
+                  <SelectTrigger className={cn(
+                    "h-8 text-[13px] border-transparent -ml-3 transition-colors",
+                    permissions.includes('UPDATE_TASK') ? "hover:border-border" : "cursor-default border-none shadow-none focus:ring-0"
+                  )}>
                     <SelectValue placeholder="Unassigned" />
                   </SelectTrigger>
                   <SelectContent>

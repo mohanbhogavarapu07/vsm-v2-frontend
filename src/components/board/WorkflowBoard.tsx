@@ -10,7 +10,14 @@ import { CompleteSprintModal } from './SprintModals';
 import {
   Loader2, AlertCircle, RefreshCw, Search, Plus, MoreHorizontal,
   Layout, Code2, Presentation, Calendar, Share2, Zap, CheckCircle2, Users,
+  Activity, Bot, Shield, Github, GitBranch, ExternalLink, Mail, UserPlus,
 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { AIDecisionCard } from '@/components/ai/AIDecisionCard';
+import { Separator } from '@/components/ui/separator';
+import { toast } from 'sonner';
+import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { InviteMemberModal } from './InviteMemberModal';
 import { Input } from '@/components/ui/input';
@@ -25,16 +32,26 @@ import { cn } from '@/lib/utils';
 
 export function WorkflowBoard() {
   const { projectId } = useParams<{ projectId: string }>();
-  const { currentProject, currentTeamId, ensureDefaultTeam } = useProjectStore();
+  const { currentProject, currentTeamId, ensureDefaultTeam, permissions, teams } = useProjectStore();
   const {
     statuses, tasks, sprints, loading, error, selectedTaskId,
     fetchWorkflows, fetchTasks, fetchSprints, updateTaskStatus, setSelectedTask, setTeamId,
   } = useWorkflowStore();
-  const { permissions } = useProjectStore();
 
-  const [currentTab, setCurrentTab] = useState<'summary' | 'backlog' | 'board' | 'code'>('board');
+  const [currentTab, setCurrentTab] = useState<'summary' | 'backlog' | 'board' | 'code' | 'activity' | 'decisions' | 'team'>('board');
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
+
+  // Activity & Decisions state
+  const [events, setEvents] = useState<any[]>([]);
+  const { aiDecisions, fetchAIDecisions } = useWorkflowStore();
+  const { members, fetchMembers, roles, fetchRoles } = useProjectStore();
+
+  // GitHub Integration State
+  const [linkedRepos, setLinkedRepos] = useState<any[]>([]);
+  const [availableRepos, setAvailableRepos] = useState<any[]>([]);
+  const [loadingRepos, setLoadingRepos] = useState(false);
+  const [linkingRepo, setLinkingRepo] = useState<number | null>(null);
 
   const activeSprints = sprints.filter((s) => s.status === 'ACTIVE');
   const plannedSprints = sprints.filter((s) => s.status === 'PLANNED');
@@ -60,22 +77,101 @@ export function WorkflowBoard() {
 
   const incompleteTasks = activeSprintTasks.filter((t) => t.status_category !== 'DONE').length;
 
+  const loadGitHubData = async (teamId: string) => {
+    setLoadingRepos(true);
+    try {
+      const promises: [Promise<any[]>, Promise<any[]> | null] = [
+        api.getTeamGitHubRepositories(teamId),
+        permissions.includes('MANAGE_TEAM') ? api.listGitHubRepositories(teamId) : Promise.resolve([])
+      ];
+      
+      const [linked, available] = await Promise.all(promises);
+      setLinkedRepos(linked || []);
+      setAvailableRepos((available || []).filter((r: any) => !r.teamId));
+    } catch (err) {
+      console.error('Failed to load GitHub data', err);
+    } finally {
+      setLoadingRepos(false);
+    }
+  };
+
+  const fetchEvents = async (teamId: string) => {
+    try {
+      const data = await api.getEventLog(teamId);
+      setEvents(data || []);
+    } catch {
+      setEvents([]);
+    }
+  };
+
   useEffect(() => {
     const boot = async () => {
       if (!projectId) return;
+
+      // Handle GitHub redirection status
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('status') === 'github_success') {
+        toast.success('GitHub App installed and repositories synced!');
+        setCurrentTab('code'); // Auto-switch to Code tab to show available repos
+        // Remove the query param from URL without refreshing
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } else if (urlParams.get('status') === 'github_error') {
+        toast.error('Failed to complete GitHub installation.');
+        window.history.replaceState({}, document.title, window.location.pathname);
+      }
+
       const teamId = currentTeamId || (await ensureDefaultTeam(projectId));
       setTeamId(teamId);
-      await Promise.all([
+      
+      const promises: Promise<any>[] = [
         fetchWorkflows(),
         fetchTasks(),
         fetchSprints(),
-      ]);
+      ];
+
+      if (currentTab === 'activity') promises.push(fetchEvents(teamId));
+      if (currentTab === 'decisions') promises.push(fetchAIDecisions());
+      if (currentTab === 'team') {
+        promises.push(fetchMembers(projectId));
+        promises.push(fetchRoles(projectId));
+      }
+      if (currentTab === 'code') promises.push(loadGitHubData(teamId));
+
+      await Promise.all(promises);
     };
     void boot();
-  }, [projectId, currentTeamId, ensureDefaultTeam, setTeamId, fetchWorkflows, fetchTasks, fetchSprints]);
+  }, [projectId, currentTeamId, ensureDefaultTeam, setTeamId, fetchWorkflows, fetchTasks, fetchSprints, currentTab, fetchAIDecisions, fetchMembers, fetchRoles]);
+
+  const handleConnectGitHub = async () => {
+    try {
+      const { url } = await api.getGitHubInstallUrl(currentTeamId || undefined);
+      window.open(url, '_blank');
+      toast.info('Installation window opened. Click Refresh after completing installation.');
+    } catch (err) {
+      toast.error('Failed to get installation URL');
+    }
+  };
+
+  const handleLinkRepo = async (repoId: number) => {
+    if (!currentTeamId) return;
+    setLinkingRepo(repoId);
+    try {
+      await api.linkGitHubRepository(currentTeamId, repoId);
+      toast.success('Repository linked successfully');
+      await loadGitHubData(currentTeamId);
+    } catch (err) {
+      toast.error('Failed to link repository');
+    } finally {
+      setLinkingRepo(null);
+    }
+  };
 
   const handleDragEnd = (result: DropResult) => {
     if (!result.destination) return;
+    if (!permissions.includes('UPDATE_TASK')) {
+      toast.error('You do not have permission to update tasks (Read-only access)');
+      return;
+    }
     const { draggableId, destination } = result;
     if (result.source.droppableId !== destination.droppableId) {
       updateTaskStatus(draggableId, destination.droppableId);
@@ -128,13 +224,19 @@ export function WorkflowBoard() {
         <div className="flex items-center justify-between px-6 mb-3 mt-1">
           <div className="flex items-center gap-3">
             <div>
-              <h1 className="text-xl font-semibold text-foreground">
-                {currentTab === 'board' && activeSprint
-                  ? `Board — ${activeSprint.name}`
-                  : currentTab === 'backlog'
-                  ? 'Backlog'
-                  : 'Sprint Board'}
-              </h1>
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded bg-orange-100 text-orange-600">
+                  <Users className="h-4 w-4" />
+                </div>
+                <h1 className="text-xl font-semibold text-foreground">
+                  {teams.find(t => t.id === currentTeamId)?.name || 'Team'}
+                </h1>
+                <span className="text-muted-foreground mx-1">/</span>
+                <h2 className="text-xl font-normal text-muted-foreground">
+                  {currentTab.charAt(0).toUpperCase() + currentTab.slice(1)}
+                  {currentTab === 'board' && activeSprint ? ` — ${activeSprint.name}` : ''}
+                </h2>
+              </div>
               {activeSprint?.goal && currentTab === 'board' && (
                 <p className="text-xs text-muted-foreground mt-0.5 italic">{activeSprint.goal}</p>
               )}
@@ -189,6 +291,9 @@ export function WorkflowBoard() {
             { id: 'backlog', label: 'Backlog', icon: Calendar },
             { id: 'board', label: 'Board', icon: Layout },
             { id: 'code', label: 'Code', icon: Code2 },
+            { id: 'activity', label: 'AI Activity', icon: Activity },
+            { id: 'decisions', label: 'AI Decisions', icon: Bot },
+            { id: 'team', label: 'Team', icon: Users },
           ].map(({ id, label, icon: Icon }) => (
             <Button
               key={id}
@@ -294,11 +399,244 @@ export function WorkflowBoard() {
           <div className="h-full overflow-y-auto">
             <BacklogView />
           </div>
-        ) : (
-          <div className="flex items-center justify-center h-full text-muted-foreground">
-            {currentTab.charAt(0).toUpperCase() + currentTab.slice(1)} view coming soon…
+        ) : currentTab === 'summary' ? (
+          <div className="h-full overflow-y-auto p-6 max-w-5xl mx-auto space-y-6">
+            <div className="grid gap-4 md:grid-cols-3">
+              <Card className="bg-primary/5 border-primary/20">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">Active Sprint</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold">{activeSprint?.name || 'None'}</p>
+                </CardContent>
+              </Card>
+              <Card className="bg-success/5 border-success/20">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">Completed Tasks</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold">{tasks.filter(t => t.status_category === 'DONE').length}</p>
+                </CardContent>
+              </Card>
+              <Card className="bg-warning/5 border-warning/20">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm font-medium">In Progress</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-2xl font-bold">{tasks.filter(t => t.status_category === 'ACTIVE').length}</p>
+                </CardContent>
+              </Card>
+            </div>
+            
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Team Velocity</CardTitle>
+                <CardDescription>Performance over the last 30 days</CardDescription>
+              </CardHeader>
+              <CardContent className="h-40 flex items-center justify-center text-muted-foreground italic">
+                Velocity data will populate as more tasks are completed.
+              </CardContent>
+            </Card>
           </div>
-        )}
+        ) : currentTab === 'activity' ? (
+          <div className="h-full overflow-y-auto p-6 space-y-2 scrollbar-thin">
+            {events.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20">
+                <Activity className="mb-3 h-10 w-10 text-muted-foreground/30" />
+                <p className="text-sm text-muted-foreground">No events recorded yet.</p>
+              </div>
+            ) : (
+              events.map((event: any) => (
+                <div key={event.id} className="flex items-start gap-4 rounded-lg border border-border bg-card p-4 mx-auto max-w-4xl">
+                  <Badge variant="secondary" className="shrink-0 text-[10px] bg-primary/10 text-primary">
+                    {event.event_type}
+                  </Badge>
+                  <div className="flex-1">
+                    <p className="text-sm text-foreground">
+                      {event.metadata?.message || event.metadata?.description || event.event_type}
+                    </p>
+                    {event.task_id && (
+                      <p className="text-xs text-muted-foreground">Task #{event.task_id}</p>
+                    )}
+                  </div>
+                  <p className="shrink-0 text-xs text-muted-foreground">
+                    {new Date(event.created_at || event.timestamp).toLocaleString()}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+        ) : currentTab === 'decisions' ? (
+          <div className="h-full overflow-y-auto p-6 scrollbar-thin max-w-4xl mx-auto">
+            {aiDecisions.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20">
+                <Bot className="mb-3 h-10 w-10 text-muted-foreground/30" />
+                <p className="text-sm text-muted-foreground">No AI decisions yet.</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {aiDecisions.filter(d => d.status === 'PENDING_APPROVAL').length > 0 && (
+                  <div>
+                    <h2 className="mb-3 text-sm font-semibold uppercase text-warning">Pending Approval</h2>
+                    <div className="space-y-3">
+                      {aiDecisions.filter(d => d.status === 'PENDING_APPROVAL').map((d) => (
+                        <AIDecisionCard key={d.id} decision={d} onAction={fetchAIDecisions} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <h2 className="mb-3 text-sm font-semibold uppercase text-muted-foreground">Decision History</h2>
+                  <div className="space-y-3">
+                    {aiDecisions.filter(d => d.status !== 'PENDING_APPROVAL').map((d) => (
+                      <AIDecisionCard key={d.id} decision={d} onAction={fetchAIDecisions} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : currentTab === 'team' ? (
+          <div className="h-full overflow-y-auto p-6 max-w-4xl mx-auto">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Users className="h-5 w-5 text-primary" />
+                  Team Members ({members.length})
+                </CardTitle>
+                <CardDescription>Manage members for this specific team</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {members.length === 0 ? (
+                  <p className="text-center py-8 text-sm text-muted-foreground">No team members yet</p>
+                ) : (
+                  members.map((member) => {
+                    const memberRole = roles.find((r) => r.id === member.role_id);
+                    return (
+                      <div key={member.id} className="flex items-center justify-between rounded-lg border p-3">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                            {member.full_name?.[0]?.toUpperCase() || member.email[0]?.toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium">{member.full_name || member.email}</p>
+                            <p className="text-xs text-muted-foreground">{member.email}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="secondary" className="text-xs">{memberRole?.name || '—'}</Badge>
+                          <Badge variant="outline" className={cn(
+                            'text-xs',
+                            member.status === 'ACTIVE' ? 'border-success/30 text-success' : 'border-warning/30 text-warning'
+                          )}>
+                            {member.status}
+                          </Badge>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        ) : currentTab === 'code' ? (
+          <div className="h-full overflow-y-auto p-6 max-w-5xl mx-auto space-y-6">
+            <div className="grid gap-6 md:grid-cols-2">
+              {permissions.includes('MANAGE_TEAM') && (
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#24292e] text-white">
+                          <Github className="h-6 w-6" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-lg">GitHub App</CardTitle>
+                          <CardDescription>Team Integration</CardDescription>
+                        </div>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <p className="text-sm text-muted-foreground">
+                      Connect this team to GitHub to allow the AI to track PRs and commits.
+                    </p>
+                    <Button variant="outline" className="w-full gap-2" onClick={handleConnectGitHub}>
+                      <ExternalLink className="h-4 w-4" />
+                      Connect GitHub
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <GitBranch className="h-5 w-5 text-primary" />
+                    Linked Repositories
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {linkedRepos.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">No repositories linked</p>
+                  ) : (
+                    linkedRepos.map((repo) => (
+                      <div key={repo.id} className="flex items-center justify-between rounded-lg border p-3 mb-2">
+                        <span className="text-sm font-medium">{repo.fullName}</span>
+                        <Badge variant="outline" className="text-[10px] text-success border-success/30">Active</Badge>
+                      </div>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+            
+            {permissions.includes('MANAGE_TEAM') && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center justify-between">
+                    Available Repositories
+                    {loadingRepos && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+                  </CardTitle>
+                  <CardDescription>Select a repository to link with this team.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {availableRepos.length === 0 ? (
+                    <div className="text-center py-6 bg-muted/10 rounded-lg border border-dashed">
+                      <p className="text-xs text-muted-foreground">No available repositories found.</p>
+                      <Button 
+                        variant="link" 
+                        className="text-[10px] h-auto p-0 mt-1" 
+                        onClick={() => currentTeamId && loadGitHubData(currentTeamId)}
+                      >
+                        Click to refresh
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      {availableRepos.map((repo) => (
+                        <div key={repo.id} className="flex items-center justify-between rounded-lg border p-3 bg-card hover:border-primary/30 transition-colors">
+                          <div className="min-w-0 flex-1 pr-2">
+                            <p className="text-xs font-medium truncate">{repo.fullName || repo.name}</p>
+                          </div>
+                          <Button 
+                            size="sm" 
+                            variant="secondary" 
+                            className="h-7 px-2 text-[10px]" 
+                            disabled={linkingRepo === repo.id}
+                            onClick={() => handleLinkRepo(repo.id)}
+                          >
+                            {linkingRepo === repo.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Link'}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        ) : null}
       </div>
 
       {/* ── Task Detail Panel ────────────────────────────────────────────── */}

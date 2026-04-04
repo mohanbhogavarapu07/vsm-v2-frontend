@@ -6,9 +6,11 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 import { Loader2, Mail, Users, Shield, CheckCircle2, AlertCircle, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
+import { api } from '@/lib/api';
 
 interface InvitationDetails {
   invitation_id: number;
+  project_id: number;
   team_id: number;
   team_name: string;
   role_name: string;
@@ -20,80 +22,79 @@ interface InvitationDetails {
 const AcceptInvitePage = () => {
   const { invitationId } = useParams<{ invitationId: string }>();
   const navigate = useNavigate();
-  const { user, signInWithGoogle, loading: authLoading } = useAuthStore();
+  const { user, signInWithGoogle, signOut, initialize, loading: authLoading } = useAuthStore();
   
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [invite, setInvite] = useState<InvitationDetails | null>(null);
   const [accepting, setAccepting] = useState(false);
 
-  const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+  useEffect(() => {
+    initialize();
+  }, [initialize]);
 
   useEffect(() => {
     const fetchInviteDetails = async () => {
+      if (!invitationId) return;
+      
       try {
-        const response = await fetch(`${API_BASE}/invitations/${invitationId}`);
-        if (!response.ok) {
-          if (response.status === 404) throw new Error("Invitation not found or expired.");
-          throw new Error("Failed to fetch invitation details.");
-        }
-        const data = await response.json();
+        setLoading(true);
+        const data = await api.getInvitationDetails(invitationId);
         setInvite(data);
         
         if (data.accepted_at) {
           setError("This invitation has already been accepted.");
         }
       } catch (err: any) {
-        setError(err.message);
+        console.error("Failed to fetch invite:", err);
+        setError(err.message || "Failed to fetch invitation details.");
       } finally {
         setLoading(false);
       }
     };
 
-    if (invitationId) {
-      fetchInviteDetails();
-    }
-  }, [invitationId, API_BASE]);
+    fetchInviteDetails();
+  }, [invitationId]);
+
+  const isEmailMismatch = user && invite && user.email?.toLowerCase() !== invite.email.toLowerCase();
 
   const handleAccept = async () => {
-    if (!user || !invite) return;
+    if (!user || !invite || isEmailMismatch) return;
 
     setAccepting(true);
     try {
-      const response = await fetch(`${API_BASE}/teams/${invite.team_id}/invitations/accept`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-User-ID': user.backendId || ''
-        },
-        body: JSON.stringify({
-          invitation_id: invite.invitation_id,
-          name: user.name
-        })
+      const result = await api.acceptInvitation(String(invite.team_id), {
+        invitation_id: invite.invitation_id,
+        name: user.name
       });
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || "Failed to accept invitation.");
-      }
-
       toast.success(`Welcome to ${invite.team_name}!`);
-      // Redirect to the project board
-      // Note: We might need the projectId, but usually accepting an invite 
-      // is enough to let the user see the projects list.
-      navigate('/projects');
+      
+      // Direct redirection to the team board
+      if (result.project_id && result.team_id) {
+        navigate(`/projects/${result.project_id}/teams/${result.team_id}/board`);
+      } else {
+        navigate('/projects');
+      }
     } catch (err: any) {
-      toast.error(err.message);
+      console.error("Failed to accept invite:", err);
+      toast.error(err.message || "Failed to join team");
     } finally {
       setAccepting(false);
     }
+  };
+
+  const handleSwitchAccount = async () => {
+    await signOut();
+    // After signout, the UI will show the "Login with Google" button again
+    toast.info("Signed out. Please log in with the invited email.");
   };
 
   if (loading) {
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center bg-slate-50 dark:bg-slate-950">
         <Loader2 className="mb-4 h-12 w-12 animate-spin text-primary" />
-        <p className="text-slate-500 animate-pulse">Loading invitation details...</p>
+        <p className="text-slate-500 animate-pulse font-medium">Validating your invitation...</p>
       </div>
     );
   }
@@ -121,51 +122,76 @@ const AcceptInvitePage = () => {
 
           <CardContent className="space-y-6 pt-4">
             {error ? (
-              <div className="rounded-lg bg-destructive/10 p-4 text-center">
-                <AlertCircle className="mx-auto h-8 w-8 text-destructive mb-2" />
-                <p className="font-semibold text-destructive">{error}</p>
-                <Button variant="link" asChild className="mt-2">
-                  <Link to="/">Go to Home</Link>
+              <div className="rounded-lg bg-destructive/10 p-6 text-center border border-destructive/20">
+                <AlertCircle className="mx-auto h-10 w-10 text-destructive mb-3" />
+                <p className="font-semibold text-destructive text-lg">{error}</p>
+                <Button variant="outline" asChild className="mt-4 border-destructive/30 hover:bg-destructive/5">
+                  <Link to="/">Return to Home</Link>
                 </Button>
               </div>
             ) : (
               <>
                 <div className="space-y-4">
-                  <div className="flex items-start gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700">
+                  <div className="flex items-start gap-4 p-4 rounded-xl bg-slate-50/50 dark:bg-slate-800/30 border border-slate-100 dark:border-slate-700">
                     <div className="mt-1 rounded-full p-2 bg-blue-500/10 text-blue-500">
                       <Users className="h-5 w-5" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-slate-500">Team Name</p>
+                      <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Team Name</p>
                       <p className="text-lg font-bold">{invite?.team_name}</p>
                     </div>
                   </div>
 
-                  <div className="flex items-start gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700">
+                  <div className="flex items-start gap-4 p-4 rounded-xl bg-slate-50/50 dark:bg-slate-800/30 border border-slate-100 dark:border-slate-700">
                     <div className="mt-1 rounded-full p-2 bg-indigo-500/10 text-indigo-500">
                       <Shield className="h-5 w-5" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-slate-500">Your Role</p>
+                      <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Your Role</p>
                       <p className="text-lg font-bold">{invite?.role_name}</p>
                     </div>
                   </div>
 
-                  <div className="flex items-start gap-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-700">
+                  <div className="flex items-start gap-4 p-4 rounded-xl bg-slate-50/50 dark:bg-slate-800/30 border border-slate-100 dark:border-slate-700">
                     <div className="mt-1 rounded-full p-2 bg-purple-500/10 text-purple-500">
                       <Mail className="h-5 w-5" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-slate-500">Invited By</p>
+                      <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Invited By</p>
                       <p className="text-lg font-bold">{invite?.inviter_name}</p>
                     </div>
                   </div>
                 </div>
 
+                {isEmailMismatch && (
+                  <div className="p-4 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                    <div className="flex gap-3">
+                      <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 shrink-0" />
+                      <div className="space-y-2">
+                        <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+                          Email Mismatch
+                        </p>
+                        <p className="text-xs text-amber-700 dark:text-amber-400">
+                          This invitation was sent to <span className="font-bold underline">{invite?.email}</span>, 
+                          but you are logged in as <span className="font-bold">{user?.email}</span>.
+                        </p>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={handleSwitchAccount}
+                          className="mt-1 h-8 text-xs border-amber-300 hover:bg-amber-100"
+                        >
+                          Switch Account
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {!user && (
                   <div className="p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800">
-                    <p className="text-sm text-blue-700 dark:text-blue-300 text-center">
-                      Please log in with Google to accept this invitation and continue.
+                    <p className="text-sm text-blue-700 dark:text-blue-300 text-center font-medium">
+                      Please log in with Google to verify your invitation and join the team.
                     </p>
                   </div>
                 )}
@@ -180,7 +206,7 @@ const AcceptInvitePage = () => {
                   <Button 
                     onClick={signInWithGoogle} 
                     disabled={authLoading}
-                    className="w-full h-12 text-lg font-semibold shadow-lg shadow-primary/20 transition-all hover:scale-[1.02]"
+                    className="w-full h-12 text-lg font-semibold shadow-lg shadow-primary/20 transition-all hover:scale-[1.02] bg-primary hover:bg-primary/90"
                   >
                     {authLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : "Login with Google"}
                     {!authLoading && <ArrowRight className="ml-2 h-5 w-5" />}
@@ -188,17 +214,21 @@ const AcceptInvitePage = () => {
                 ) : (
                   <Button 
                     onClick={handleAccept} 
-                    disabled={accepting}
-                    className="w-full h-12 text-lg font-semibold bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 shadow-lg shadow-indigo-200 dark:shadow-indigo-900/20 transition-all hover:scale-[1.02]"
+                    disabled={accepting || isEmailMismatch}
+                    className={`w-full h-12 text-lg font-semibold shadow-lg transition-all hover:scale-[1.02] ${
+                      isEmailMismatch 
+                        ? 'bg-slate-200 text-slate-500 cursor-not-allowed hover:scale-100 shadow-none' 
+                        : 'bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 shadow-indigo-200 dark:shadow-indigo-900/20'
+                    }`}
                   >
                     {accepting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : "Accept Invitation"}
-                    {!accepting && <CheckCircle2 className="ml-2 h-5 w-5" />}
+                    {!accepting && !isEmailMismatch && <CheckCircle2 className="ml-2 h-5 w-5" />}
                   </Button>
                 )}
               </>
             )}
             
-            <p className="text-xs text-center text-slate-400 mt-2">
+            <p className="text-[10px] text-center text-slate-400 mt-2">
               By joining, you agree to our Terms of Service and Privacy Policy.
             </p>
           </CardFooter>

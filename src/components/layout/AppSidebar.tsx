@@ -41,7 +41,7 @@ export function AppSidebar() {
 
   const hasPermission = (perm: string) => permissions.includes(perm);
 
-  const userMeta = (user as any)?.user_metadata;
+  const userMeta = user?.user_metadata as Record<string, any> | undefined;
   const initials = userMeta?.full_name
     ?.split(' ')
     .map((n: string) => n[0])
@@ -49,19 +49,17 @@ export function AppSidebar() {
     .toUpperCase() || user?.email?.[0]?.toUpperCase() || '?';
 
   let projectNav: any[] = [];
-  if (projectId) {
-    if (teamId) {
-      projectNav = [
-        { path: `/projects/${projectId}/teams/${teamId}/board`, icon: KanbanSquare, label: 'Board' },
-        { path: `/projects/${projectId}/teams/${teamId}/activity`, icon: Activity, label: 'AI Activity' },
-        { path: `/projects/${projectId}/teams/${teamId}/decisions`, icon: Bot, label: 'AI Decisions' },
-        ...(hasPermission('MANAGE_TEAM') ? [
-          { path: `/projects/${projectId}/teams/${teamId}/team`, icon: Users, label: 'Team Roles' },
-          { path: `/projects/${projectId}/teams/${teamId}/settings`, icon: Settings, label: 'Settings' },
-        ] : []),
-      ];
+  if (projectId && permissions.includes('MANAGE_TEAM')) {
+    if (!currentProject?.setupComplete) {
+      projectNav.push({ 
+        path: `/projects/${projectId}/setup`, 
+        icon: Settings, 
+        label: 'Complete Setup',
+        className: 'text-warning font-semibold bg-warning/5'
+      });
+    } else {
+      projectNav.push({ path: `/projects/${projectId}/setup`, icon: Settings, label: 'Project Config' });
     }
-    projectNav.push({ path: `/projects/${projectId}/setup`, icon: Settings, label: 'Manage Setup' });
   }
 
   return (
@@ -144,7 +142,8 @@ export function AppSidebar() {
                 'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
                 isActive
                   ? 'bg-primary/10 text-primary'
-                  : 'text-muted-foreground hover:bg-accent hover:text-foreground'
+                  : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                item.className
               )}
             >
               <item.icon className="h-4 w-4 shrink-0" />

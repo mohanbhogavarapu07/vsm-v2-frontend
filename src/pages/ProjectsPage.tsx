@@ -57,7 +57,7 @@ export default function ProjectsPage() {
     setCurrentProject(project);
     try {
       const teams = await api.listTeams(project.id);
-      if (teams && teams.length > 0 && (project as any).setup_complete) {
+      if (teams && teams.length > 0 && project.setupComplete) {
         navigate(`/projects/${project.id}/teams/${teams[0].id}/board`);
       } else {
         navigate(`/projects/${project.id}/setup`);
@@ -179,12 +179,12 @@ export default function ProjectsPage() {
                       <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
                         <FolderKanban className="h-5 w-5 text-primary" />
                       </div>
-                      {!project.setup_complete && (
+                      {!project.setupComplete && (
                         <Badge variant="outline" className="text-warning border-warning/30 bg-warning/10 text-xs">
                           Setup Pending
                         </Badge>
                       )}
-                      {project.setup_complete && (
+                      {project.setupComplete && (
                         <Badge variant="outline" className="text-success border-success/30 bg-success/10 text-xs">
                           Active
                         </Badge>

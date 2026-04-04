@@ -19,7 +19,15 @@ import AcceptInvitePage from './pages/AcceptInvitePage';
 import NotFound from './pages/NotFound';
 import { Loader2 } from 'lucide-react';
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+});
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, loading, initialize } = useAuthStore();
@@ -63,9 +71,6 @@ const App = () => (
                     <Route path="/projects" element={<ProjectsPage />} />
                     <Route path="/projects/:projectId/setup" element={<ProjectSetupPage />} />
                     <Route path="/projects/:projectId/teams/:teamId/board" element={<Index />} />
-                    <Route path="/projects/:projectId/teams/:teamId/activity" element={<ActivityPage />} />
-                    <Route path="/projects/:projectId/teams/:teamId/decisions" element={<DecisionsPage />} />
-                    <Route path="/projects/:projectId/teams/:teamId/team" element={<TeamPage />} />
                     <Route path="/projects/:projectId/teams/:teamId/settings" element={<SettingsPage />} />
                     <Route path="/settings" element={<SettingsPage />} />
                   </Route>
