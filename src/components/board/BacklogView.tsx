@@ -62,9 +62,11 @@ export function BacklogView() {
 
   const [isCreatingSprint, setIsCreatingSprint] = useState(false);
   const [newSprintName, setNewSprintName] = useState('');
+  const [newSprintStart, setNewSprintStart] = useState('');
+  const [newSprintEnd, setNewSprintEnd] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const activeSprint = sprints.find((s) => s.status === 'ACTIVE');
+  const activeSprints = sprints.filter((s) => s.status === 'ACTIVE');
   const plannedSprints = sprints
     .filter((s) => s.status === 'PLANNED')
     .sort((a, b) => Number(a.id) - Number(b.id));
@@ -93,8 +95,12 @@ export function BacklogView() {
 
   const handleCreateSprint = async () => {
     if (!newSprintName.trim()) return;
-    await createSprint(newSprintName.trim());
+    const sDate = newSprintStart ? new Date(newSprintStart).toISOString() : undefined;
+    const eDate = newSprintEnd ? new Date(newSprintEnd).toISOString() : undefined;
+    await createSprint(newSprintName.trim(), undefined, sDate, eDate);
     setNewSprintName('');
+    setNewSprintStart('');
+    setNewSprintEnd('');
     setIsCreatingSprint(false);
   };
 
@@ -121,15 +127,16 @@ export function BacklogView() {
       </div>
 
       <DragDropContext onDragEnd={handleDragEnd}>
-        {/* ── Active Sprint ─────────────────────────────────────────────── */}
-        {activeSprint && (
+        {/* ── Active Sprints ─────────────────────────────────────────────── */}
+        {activeSprints.map((s) => (
           <SprintSection
-            sprint={activeSprint}
-            tasks={filteredTasksForSprint(activeSprint.id)}
+            key={s.id}
+            sprint={s}
+            tasks={filteredTasksForSprint(s.id)}
             allSprints={sprints}
             isActive
           />
-        )}
+        ))}
 
         {/* ── Planned Sprints ────────────────────────────────────────────── */}
         {plannedSprints.map((s) => (
@@ -139,7 +146,6 @@ export function BacklogView() {
             tasks={filteredTasksForSprint(s.id)}
             allSprints={sprints}
             isActive={false}
-            hasActiveSprint={!!activeSprint}
           />
         ))}
 
@@ -147,7 +153,7 @@ export function BacklogView() {
         {hasPermission('MANAGE_TEAM') && (
           <div className="px-6 py-4">
             {isCreatingSprint ? (
-              <div className="flex items-center gap-2 max-w-xs">
+              <div className="flex items-center gap-2 max-w-2xl bg-muted/30 p-2 rounded-lg border border-border">
                 <Input
                   autoFocus
                   placeholder={nextSprintName(sprints)}
@@ -157,7 +163,21 @@ export function BacklogView() {
                     if (e.key === 'Enter') handleCreateSprint();
                     if (e.key === 'Escape') setIsCreatingSprint(false);
                   }}
-                  className="h-8 text-sm"
+                  className="h-8 text-sm w-48"
+                />
+                <Input
+                  type="date"
+                  value={newSprintStart}
+                  onChange={(e) => setNewSprintStart(e.target.value)}
+                  className="h-8 text-sm w-36"
+                  title="Start Date"
+                />
+                <Input
+                  type="date"
+                  value={newSprintEnd}
+                  onChange={(e) => setNewSprintEnd(e.target.value)}
+                  className="h-8 text-sm w-36"
+                  title="End Date"
                 />
                 <Button size="sm" onClick={handleCreateSprint} className="shrink-0">
                   Create
@@ -235,13 +255,11 @@ function SprintSection({
   tasks,
   allSprints,
   isActive,
-  hasActiveSprint = false,
 }: {
   sprint: Sprint;
   tasks: Task[];
   allSprints: Sprint[];
   isActive?: boolean;
-  hasActiveSprint?: boolean;
 }) {
   const [isExpanded, setIsExpanded] = useState(true);
   const [showStartModal, setShowStartModal] = useState(false);
@@ -325,8 +343,6 @@ function SprintSection({
                   <Button
                     size="sm"
                     className="h-7 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
-                    disabled={hasActiveSprint}
-                    title={hasActiveSprint ? 'Complete the active sprint first' : ''}
                     onClick={() => setShowStartModal(true)}
                   >
                     <Play className="h-3.5 w-3.5 mr-1" />
@@ -473,7 +489,7 @@ function BacklogItem({ task, index }: { task: Task; index: number }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function InlineAddTask({ sprintId }: { sprintId: string | null }) {
-  const { createTask } = useWorkflowStore();
+  const { createTask, statuses } = useWorkflowStore();
   const [isAdding, setIsAdding] = useState(false);
   const [title, setTitle] = useState('');
 
@@ -483,7 +499,8 @@ function InlineAddTask({ sprintId }: { sprintId: string | null }) {
       setIsAdding(false);
       return;
     }
-    await createTask(trimmed, undefined, sprintId || undefined);
+    const defaultStatusId = statuses.length > 0 ? String(statuses[0].id) : undefined;
+    await createTask(trimmed, defaultStatusId, sprintId || undefined);
     setTitle('');
     setIsAdding(false);
   };

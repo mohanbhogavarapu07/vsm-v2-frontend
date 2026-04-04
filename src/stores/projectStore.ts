@@ -41,14 +41,24 @@ export interface WorkflowStage {
 export interface Project {
   id: string;
   name: string;
+  setup_complete?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
 
-type SetupStep = 'roles' | 'workflow' | 'invite' | 'complete';
+export interface Team {
+  id: string;
+  projectId: string;
+  name: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+type SetupStep = 'roles' | 'workflow' | 'teams' | 'complete';
 
 interface ProjectState {
   projects: Project[];
+  teams: Team[];
   currentProject: Project | null;
   currentTeamId: string | null;
   roles: Role[];
@@ -66,8 +76,14 @@ interface ProjectState {
   fetchProjects: () => Promise<void>;
   fetchPermissions: (teamId: string) => Promise<void>;
   setCurrentProject: (project: Project | null) => void;
+  setCurrentTeamId: (teamId: string | null) => void;
   createProject: (data: { name: string }) => Promise<Project>;
   ensureDefaultTeam: (projectId: string) => Promise<string>;
+
+  // Teams
+  fetchTeams: (projectId: string) => Promise<void>;
+  createTeam: (projectId: string, data: { name: string; copyFromTeamId?: string }) => Promise<Team>;
+  updateTeamName: (teamId: string, name: string) => Promise<void>;
 
   // Roles
   fetchRoles: (projectId: string) => Promise<void>;
@@ -124,6 +140,7 @@ function inferAccessLevel(permission_codes: string[]): AccessLevel {
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
   projects: [],
+  teams: [],
   currentProject: null,
   currentTeamId: null,
   roles: [],
@@ -140,6 +157,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const data = await api.getProjects();
+      set({ projects: data, loading: false });
     } catch (e: any) {
       set({ error: e.message, loading: false });
     }
@@ -156,7 +174,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   setCurrentProject: (project) => {
-    set({ currentProject: project, currentTeamId: null, permissions: [] });
+    set({ currentProject: project, currentTeamId: null, permissions: [], teams: [] });
+  },
+
+  setCurrentTeamId: (teamId) => {
+    set({ currentTeamId: teamId });
   },
 
   createProject: async (data) => {
@@ -187,10 +209,51 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       return teamId;
     }
     
-    const created = await api.createTeam(projectId, { name: 'Default Team' });
+    const created = await api.createTeam(projectId, { name: 'Initial Team' });
     const newTeamId = String(created.id);
     await get().fetchPermissions(newTeamId);
     return newTeamId;
+  },
+
+  fetchTeams: async (projectId: string) => {
+    set({ loading: true, error: null });
+    try {
+      const data = await api.listTeams(projectId);
+      set({
+        teams: data.map((t: any) => ({ ...t, id: String(t.id), projectId: String(t.projectId) })),
+        loading: false,
+      });
+    } catch (e: any) {
+      set({ error: e.message, loading: false });
+    }
+  },
+
+  createTeam: async (projectId: string, data: { name: string; copyFromTeamId?: string }) => {
+    set({ loading: true, error: null });
+    try {
+      const payload: any = { name: data.name };
+      if (data.copyFromTeamId) {
+         payload.copy_from_team_id = Number(data.copyFromTeamId);
+      }
+      const created = await api.createTeam(projectId, payload);
+      const team: Team = { ...created, id: String(created.id), projectId: String(created.projectId) };
+      set((state) => ({ teams: [...state.teams, team], loading: false }));
+      return team;
+    } catch (e: any) {
+      set({ error: e.message, loading: false });
+      throw e;
+    }
+  },
+
+  updateTeamName: async (teamId: string, name: string) => {
+    try {
+      await api.updateTeam(teamId, { name });
+      set((state) => ({
+        teams: state.teams.map((t) => (t.id === teamId ? { ...t, name } : t)),
+      }));
+    } catch (e: any) {
+      set({ error: e.message });
+    }
   },
 
   fetchRoles: async (projectId) => {

@@ -54,9 +54,11 @@ export const api = {
 
   // ── Teams ──────────────────────────────────────────────────────────────────
   listTeams: (projectId: string) => apiRequest<any[]>(`/projects/${projectId}/teams`),
-  createTeam: (projectId: string, data: { name: string }) =>
+  createTeam: (projectId: string, data: { name: string; copy_from_team_id?: number }) =>
     apiRequest<any>(`/projects/${projectId}/teams`, { method: 'POST', body: JSON.stringify(data) }),
   getTeam: (teamId: string) => apiRequest<any>(`/teams/${teamId}`),
+  updateTeam: (teamId: string, data: { name: string }) =>
+    apiRequest<any>(`/teams/${teamId}`, { method: 'PATCH', body: JSON.stringify(data) }, { team_id: teamId }),
 
   // ── Roles (team-scoped) ────────────────────────────────────────────────────
   listRoles: (teamId: string) =>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useProjectStore, Project } from '@/stores/projectStore';
+import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -52,9 +53,18 @@ export default function ProjectsPage() {
     }
   };
 
-  const handleOpenProject = (project: Project) => {
+  const handleOpenProject = async (project: Project) => {
     setCurrentProject(project);
-    navigate(`/projects/${project.id}/setup`);
+    try {
+      const teams = await api.listTeams(project.id);
+      if (teams && teams.length > 0 && (project as any).setup_complete) {
+        navigate(`/projects/${project.id}/teams/${teams[0].id}/board`);
+      } else {
+        navigate(`/projects/${project.id}/setup`);
+      }
+    } catch {
+      navigate(`/projects/${project.id}/setup`);
+    }
   };
 
   const generateKey = (projectName: string) => {
