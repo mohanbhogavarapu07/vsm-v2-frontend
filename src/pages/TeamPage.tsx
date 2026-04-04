@@ -27,10 +27,14 @@ import {
 } from '@/components/ui/alert-dialog';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
+  ExternalLink,
+  GitBranch,
+  Github,
   Loader2,
   Mail,
   MoreHorizontal,
   Plus,
+  RefreshCw,
   Shield,
   ShieldCheck,
   Trash2,
@@ -46,15 +50,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { api } from '@/lib/api';
+import { toast } from 'sonner';
 
 export default function TeamPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const {
+    currentTeamId,
     roles,
     members,
     loading,
     fetchRoles,
     fetchMembers,
+    ensureDefaultTeam,
     createRole,
     updateRole,
     deleteRole,
@@ -75,12 +83,65 @@ export default function TeamPage() {
   const [deleteRoleId, setDeleteRoleId] = useState<string | null>(null);
   const [removeMemberId, setRemoveMemberId] = useState<string | null>(null);
 
+  // GitHub Integration State
+  const [linkedRepos, setLinkedRepos] = useState<any[]>([]);
+  const [availableRepos, setAvailableRepos] = useState<any[]>([]);
+  const [loadingRepos, setLoadingRepos] = useState(false);
+  const [linkingRepo, setLinkingRepo] = useState<number | null>(null);
+
   useEffect(() => {
     if (projectId) {
       fetchRoles(projectId);
       fetchMembers(projectId);
+      loadGitHubData();
     }
-  }, [projectId]);
+  }, [projectId, currentTeamId]);
+
+  const loadGitHubData = async () => {
+    const teamId = currentTeamId || (projectId ? await ensureDefaultTeam(projectId) : null);
+    if (!teamId) return;
+
+    setLoadingRepos(true);
+    try {
+      const [linked, available] = await Promise.all([
+        api.getTeamGitHubRepositories(teamId),
+        api.listGitHubRepositories()
+      ]);
+      setLinkedRepos(linked);
+      // Filter out already linked repos from available list if needed, or just show all
+      setAvailableRepos(available.filter(r => !r.teamId));
+    } catch (err) {
+      console.error('Failed to load GitHub data', err);
+    } finally {
+      setLoadingRepos(false);
+    }
+  };
+
+  const handleConnectGitHub = async () => {
+    try {
+      const { url } = await api.getGitHubInstallUrl();
+      window.open(url, '_blank');
+      toast.info('Installation window opened. Click Refresh after completing installation.');
+    } catch (err) {
+      toast.error('Failed to get installation URL');
+    }
+  };
+
+  const handleLinkRepo = async (repoId: number) => {
+    const teamId = currentTeamId;
+    if (!teamId) return;
+
+    setLinkingRepo(repoId);
+    try {
+      await api.linkGitHubRepository(teamId, repoId);
+      toast.success('Repository linked successfully');
+      await loadGitHubData();
+    } catch (err) {
+      toast.error('Failed to link repository');
+    } finally {
+      setLinkingRepo(null);
+    }
+  };
 
   const handleInvite = async () => {
     if (!inviteEmail.trim() || !inviteRoleId || !projectId) return;
@@ -89,6 +150,7 @@ export default function TeamPage() {
       await inviteMember(projectId, inviteEmail.trim(), inviteRoleId);
       setInviteEmail('');
       setInviteRoleId('');
+      toast.success('Invitation sent');
     } catch {} finally {
       setInviting(false);
     }
@@ -107,6 +169,7 @@ export default function TeamPage() {
       setNewRoleDesc('');
       setNewRoleAccess('LOW');
       setShowAddRole(false);
+      toast.success('Role created');
     } catch {} finally {
       setCreatingRole(false);
     }
@@ -144,6 +207,9 @@ export default function TeamPage() {
           </TabsTrigger>
           <TabsTrigger value="roles" className="gap-2">
             <Shield className="h-4 w-4" /> Roles & Access
+          </TabsTrigger>
+          <TabsTrigger value="integrations" className="gap-2">
+            <GitBranch className="h-4 w-4" /> Integrations
           </TabsTrigger>
         </TabsList>
 
@@ -406,6 +472,105 @@ export default function TeamPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Integrations Tab */}
+        <TabsContent value="integrations" className="space-y-4">
+          <div className="grid gap-6 md:grid-cols-2">
+            {/* GitHub Connect */}
+            <Card className="flex flex-col">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#24292e] text-white">
+                      <Github className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-lg">GitHub App</CardTitle>
+                      <CardDescription>Direct integration via GitHub App</CardDescription>
+                    </div>
+                  </div>
+                  <Button variant="ghost" size="icon" onClick={loadGitHubData} disabled={loadingRepos}>
+                    <RefreshCw className={cn("h-4 w-4", loadingRepos && "animate-spin")} />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="flex-1 space-y-4">
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Install our GitHub App on your account or organization to allow VSM to track commits, PRs, and branch activities.
+                </p>
+                <Button variant="outline" className="w-full gap-2" onClick={handleConnectGitHub}>
+                  <ExternalLink className="h-4 w-4" />
+                  Install / Manage GitHub App
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Linked Repositories */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <GitBranch className="h-5 w-5 text-primary" />
+                  Linked Repositories
+                </CardTitle>
+                <CardDescription>Repositories linked to this team</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loadingRepos ? (
+                  <div className="flex flex-col items-center py-6">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : linkedRepos.length === 0 ? (
+                  <div className="rounded-lg border border-dashed p-8 text-center">
+                    <p className="text-sm text-muted-foreground">No repositories linked yet</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {linkedRepos.map((repo) => (
+                      <div key={repo.id} className="flex items-center justify-between rounded-lg border p-3">
+                        <div className="flex items-center gap-2">
+                          <GitBranch className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm font-medium">{repo.fullName}</span>
+                        </div>
+                        <Badge variant="outline" className="text-[10px] text-success border-success/30">Active</Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Repository Linking */}
+          {availableRepos.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Available Repositories</CardTitle>
+                <CardDescription>Select a repository to link it to this team</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {availableRepos.map((repo) => (
+                    <div key={repo.id} className="flex items-center justify-between rounded-lg border p-3 hover:bg-accent/50 transition-colors">
+                      <div className="flex-1 min-w-0 pr-2">
+                        <p className="text-sm font-medium truncate">{repo.name}</p>
+                        <p className="text-[10px] text-muted-foreground truncate">{repo.fullName}</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="h-8 shrink-0"
+                        onClick={() => handleLinkRepo(repo.id)}
+                        disabled={linkingRepo === repo.id}
+                      >
+                        {linkingRepo === repo.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Link'}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
       </Tabs>
 

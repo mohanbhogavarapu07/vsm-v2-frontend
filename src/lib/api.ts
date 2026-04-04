@@ -149,4 +149,12 @@ export const api = {
 
   // ── Permissions self-check ────────────────────────────────────────────────
   myPermissions: (teamId: string) => apiRequest<{ permissions: string[] }>('/me/permissions', undefined, { team_id: teamId }),
+
+  // ── GitHub App Integration ────────────────────────────────────────────────
+  getGitHubInstallUrl: () => apiRequest<{ url: string }>('/integrations/github/install'),
+  listGitHubRepositories: () => apiRequest<any[]>('/integrations/github/repositories'),
+  linkGitHubRepository: (teamId: string, repositoryId: number) =>
+    apiRequest<any>('/integrations/github/link', { method: 'POST', body: JSON.stringify({ repository_id: repositoryId }) }, { team_id: teamId }),
+  getTeamGitHubRepositories: (teamId: string) =>
+    apiRequest<any[]>(`/integrations/github/team/${teamId}`),
 };
