@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { DragDropContext, type DropResult } from '@hello-pangea/dnd';
 import { useWorkflowStore } from '@/stores/workflowStore';
 import { useProjectStore } from '@/stores/projectStore';
-import { useParams } from 'react-router-dom';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import { KanbanColumn } from './KanbanColumn';
 import { BacklogView } from './BacklogView';
 import { TaskDetailPanel } from './TaskDetailPanel';
@@ -29,6 +29,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 
 export function WorkflowBoard() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -38,9 +43,13 @@ export function WorkflowBoard() {
     fetchWorkflows, fetchTasks, fetchSprints, updateTaskStatus, setSelectedTask, setTeamId,
   } = useWorkflowStore();
 
+  const navigate = useNavigate();
+  const location = useLocation();
   const [currentTab, setCurrentTab] = useState<'summary' | 'backlog' | 'board' | 'code' | 'activity' | 'decisions' | 'team'>('board');
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [boardSearch, setBoardSearch] = useState('');
+  const [codeSearch, setCodeSearch] = useState('');
 
   // Activity & Decisions state
   const [events, setEvents] = useState<any[]>([]);
@@ -71,11 +80,18 @@ export function WorkflowBoard() {
   const activeSprint = activeSprints.find((s) => s.id === viewedSprintId) || activeSprints[0];
 
   // Tasks in the active sprint (for kanban board view)
-  const activeSprintTasks = activeSprint
-    ? tasks.filter((t) => t.sprint_id === activeSprint.id)
-    : tasks; // fallback: show all if no sprint set up yet
+  const activeSprintTasks = useMemo(() => {
+    const sprintTasks = activeSprint
+      ? tasks.filter((t) => t.sprint_id === activeSprint.id)
+      : tasks;
+    if (!boardSearch.trim()) return sprintTasks;
+    return sprintTasks.filter((t) => t.title.toLowerCase().includes(boardSearch.toLowerCase()));
+  }, [activeSprint, tasks, boardSearch]);
 
-  const incompleteTasks = activeSprintTasks.filter((t) => t.status_category !== 'DONE').length;
+  const incompleteTasks = (activeSprint
+    ? tasks.filter((t) => t.sprint_id === activeSprint.id)
+    : tasks
+  ).filter((t) => t.status_category !== 'DONE').length;
 
   const loadGitHubData = async (teamId: string) => {
     setLoadingRepos(true);
@@ -127,12 +143,12 @@ export function WorkflowBoard() {
         fetchWorkflows(),
         fetchTasks(),
         fetchSprints(),
+        fetchMembers(projectId), // Always fetch members for Task Assignment UI
       ];
 
       if (currentTab === 'activity') promises.push(fetchEvents(teamId));
       if (currentTab === 'decisions') promises.push(fetchAIDecisions());
       if (currentTab === 'team') {
-        promises.push(fetchMembers(projectId));
         promises.push(fetchRoles(projectId));
       }
       if (currentTab === 'code') promises.push(loadGitHubData(teamId));
@@ -141,6 +157,35 @@ export function WorkflowBoard() {
     };
     void boot();
   }, [projectId, currentTeamId, ensureDefaultTeam, setTeamId, fetchWorkflows, fetchTasks, fetchSprints, currentTab, fetchAIDecisions, fetchMembers, fetchRoles]);
+
+  // Handle precise Jira-like URL synchronization
+  useEffect(() => {
+    if (location.pathname.includes('/backlog')) {
+      if (currentTab !== 'backlog') setCurrentTab('backlog');
+    } else if (location.pathname.includes('/board')) {
+      if (currentTab !== 'board') setCurrentTab('board');
+    }
+
+    const taskMatch = location.pathname.match(/\/task\/(vsm-\d+|\d+)/i);
+    if (taskMatch) {
+      if (selectedTaskId !== taskMatch[1]) {
+         setSelectedTask(taskMatch[1]);
+      }
+    } else {
+      if (selectedTaskId) {
+         setSelectedTask(null);
+      }
+    }
+  }, [location.pathname]);
+
+  const handleTabChange = (tab: typeof currentTab) => {
+    setCurrentTab(tab);
+    if (tab === 'backlog') {
+       navigate(`/projects/${projectId}/teams/${currentTeamId}/backlog`);
+    } else if (tab === 'board') {
+       navigate(`/projects/${projectId}/teams/${currentTeamId}/board`);
+    }
+  };
 
   const handleConnectGitHub = async () => {
     try {
@@ -204,7 +249,7 @@ export function WorkflowBoard() {
   return (
     <div className="flex h-full flex-col">
       {/* ── Header ──────────────────────────────────────────────────────── */}
-      <div className="flex flex-col border-b border-border bg-background pt-2">
+      <div className="flex flex-col border-b border-border/50 bg-background pt-2 shadow-[0_4px_20px_-2px_rgba(0,0,0,0.02)] z-10 relative">
         {/* Breadcrumb */}
         <div className="flex items-center justify-between px-6 py-1.5">
           <div className="text-xs text-muted-foreground flex items-center gap-2">
@@ -285,7 +330,7 @@ export function WorkflowBoard() {
         </div>
 
         {/* Tabs */}
-        <div className="flex items-center gap-1 px-6">
+        <div className="flex items-center gap-2 px-6 pb-2 pt-1">
           {[
             { id: 'summary', label: 'Summary', icon: Presentation },
             { id: 'backlog', label: 'Backlog', icon: Calendar },
@@ -300,10 +345,10 @@ export function WorkflowBoard() {
               variant="ghost"
               onClick={() => setCurrentTab(id as any)}
               className={cn(
-                'h-9 px-3 mb-[-1px] font-normal rounded-none hover:bg-transparent transition-all text-sm',
+                'h-8 px-3.5 rounded-full transition-all text-sm font-medium',
                 currentTab === id
-                  ? 'border-b-2 border-primary text-primary font-medium'
-                  : 'text-muted-foreground hover:text-foreground'
+                  ? 'bg-primary/10 text-primary shadow-sm'
+                  : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
               )}
             >
               <Icon className="mr-1.5 h-4 w-4" />
@@ -311,7 +356,7 @@ export function WorkflowBoard() {
             </Button>
           ))}
           {permissions.includes('MANAGE_TEAM') && (
-            <Button variant="ghost" size="icon" className="h-9 w-9 mb-[-1px] text-muted-foreground rounded-none">
+            <Button variant="ghost" size="icon" className="h-8 w-8 ml-1 text-muted-foreground rounded-full hover:bg-muted/60">
               <Plus className="h-4 w-4" />
             </Button>
           )}
@@ -325,37 +370,56 @@ export function WorkflowBoard() {
         </div>
       </div>
 
-      {/* ── Filter Row ───────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-3 px-6 py-2 bg-muted/20 border-b border-border">
-        <div className="relative w-48 transition-all focus-within:w-64">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search board"
-            className="h-8 pl-8 bg-background border-border text-xs"
-          />
-        </div>
-        <div className="flex -space-x-1">
-          <div className="h-7 w-7 rounded-full bg-orange-500 text-white text-[10px] flex items-center justify-center font-medium border-2 border-background">NB</div>
-          <div className="h-7 w-7 rounded-full bg-blue-900 text-white text-[10px] flex items-center justify-center font-medium border-2 border-background">SG</div>
-        </div>
-        <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground font-medium">
-          Filter
-        </Button>
-        <div className="flex-1" />
-        <Button
-          onClick={() => { fetchWorkflows(); fetchTasks(); fetchSprints(); }}
-          variant="ghost"
-          size="sm"
-          className="h-8 text-xs text-muted-foreground"
-        >
-          <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Refresh
-        </Button>
-      </div>
+      {/* ── Per-tab search sub-bar (Board & Code only) ──────────────────── */}
+      {(currentTab === 'board' || currentTab === 'code') && (
+        <div className="flex items-center gap-4 px-6 py-2.5 bg-muted/10 border-b border-border/50">
+          {/* Search */}
+          <div className="relative w-[240px]">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder={currentTab === 'board' ? 'Search Board' : 'Search repositories'}
+              value={currentTab === 'board' ? boardSearch : codeSearch}
+              onChange={(e) => currentTab === 'board' ? setBoardSearch(e.target.value) : setCodeSearch(e.target.value)}
+              className="h-8 pl-9 bg-card border-border/60 text-xs rounded-full"
+            />
+          </div>
 
+
+          {/* Member avatars */}
+          <div className="flex -space-x-2">
+            <div
+              title="Unassigned"
+              className="h-7 w-7 rounded-full border-2 border-background border-dashed border-muted-foreground/40 flex items-center justify-center bg-muted/40 cursor-pointer hover:scale-110 transition-transform z-10"
+            >
+              <UserPlus className="h-3 w-3 text-muted-foreground/60" />
+            </div>
+            {members.map((member, i) => {
+              const initials = member.full_name
+                ? member.full_name.split(' ').map((w: string) => w[0]).join('').substring(0, 2).toUpperCase()
+                : member.email.substring(0, 2).toUpperCase();
+              const colors = [
+                'bg-indigo-500', 'bg-teal-500', 'bg-orange-500', 'bg-pink-500',
+                'bg-violet-500', 'bg-cyan-500', 'bg-rose-500', 'bg-emerald-500',
+              ];
+              const color = colors[i % colors.length];
+              return (
+                <div
+                  key={member.id}
+                  title={member.full_name || member.email}
+                  className={`h-7 w-7 rounded-full border-2 border-background flex items-center justify-center text-[10px] font-bold text-white cursor-pointer hover:scale-110 transition-transform select-none ${color}`}
+                  style={{ zIndex: 10 + i }}
+                >
+                  {initials}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
       {/* ── Content ─────────────────────────────────────────────────────── */}
       <div className="flex-1 overflow-hidden">
         {currentTab === 'board' ? (
-          <div className="h-full overflow-x-auto p-4 bg-[#f4f5f7]/30 dark:bg-transparent">
+          <div className="h-full overflow-x-auto p-6 bg-transparent">
             {!activeSprint && sprints.length === 0 && (
               <div className="flex flex-col items-center justify-center h-[60%] gap-3 text-center">
                 <Calendar className="h-12 w-12 text-muted-foreground/40" />
@@ -580,12 +644,14 @@ export function WorkflowBoard() {
                   {linkedRepos.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-4">No repositories linked</p>
                   ) : (
-                    linkedRepos.map((repo) => (
-                      <div key={repo.id} className="flex items-center justify-between rounded-lg border p-3 mb-2">
-                        <span className="text-sm font-medium">{repo.fullName}</span>
-                        <Badge variant="outline" className="text-[10px] text-success border-success/30">Active</Badge>
-                      </div>
-                    ))
+                    linkedRepos
+                      .filter((repo) => !codeSearch || repo.fullName?.toLowerCase().includes(codeSearch.toLowerCase()))
+                      .map((repo) => (
+                        <div key={repo.id} className="flex items-center justify-between rounded-lg border p-3 mb-2">
+                          <span className="text-sm font-medium">{repo.fullName}</span>
+                          <Badge variant="outline" className="text-[10px] text-success border-success/30">Active</Badge>
+                        </div>
+                      ))
                   )}
                 </CardContent>
               </Card>
