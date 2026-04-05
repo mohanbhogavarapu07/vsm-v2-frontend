@@ -88,6 +88,7 @@ export default function TeamPage() {
   const [availableRepos, setAvailableRepos] = useState<any[]>([]);
   const [loadingRepos, setLoadingRepos] = useState(false);
   const [linkingRepo, setLinkingRepo] = useState<number | null>(null);
+  const [showRepoSelector, setShowRepoSelector] = useState(false);
 
   useEffect(() => {
     if (projectId) {
@@ -499,100 +500,116 @@ export default function TeamPage() {
 
         {/* Integrations Tab */}
         <TabsContent value="integrations" className="space-y-4">
-          <div className="grid gap-6 md:grid-cols-2">
-            {/* GitHub Connect */}
-            <Card className="flex flex-col">
+          {linkedRepos.length > 0 && !showRepoSelector ? (
+            <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#24292e] text-white">
-                      <Github className="h-6 w-6" />
-                    </div>
-                    <div>
-                      <CardTitle className="text-lg">GitHub App</CardTitle>
-                      <CardDescription>Direct integration via GitHub App</CardDescription>
-                    </div>
+                  <div>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <GitBranch className="h-5 w-5 text-primary" />
+                      Connected Repository
+                    </CardTitle>
+                    <CardDescription>The strictly linked GitHub repository for this team</CardDescription>
                   </div>
                   <Button variant="ghost" size="icon" onClick={loadGitHubData} disabled={loadingRepos}>
                     <RefreshCw className={cn("h-4 w-4", loadingRepos && "animate-spin")} />
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="flex-1 space-y-4">
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  Install our GitHub App on your account or organization to allow VSM to track commits, PRs, and branch activities.
-                </p>
-                <Button variant="outline" className="w-full gap-2" onClick={handleConnectGitHub}>
-                  <ExternalLink className="h-4 w-4" />
-                  Install / Manage GitHub App
-                </Button>
-              </CardContent>
-            </Card>
-
-            {/* Linked Repositories */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <GitBranch className="h-5 w-5 text-primary" />
-                  Linked Repositories
-                </CardTitle>
-                <CardDescription>Repositories linked to this team</CardDescription>
-              </CardHeader>
               <CardContent>
-                {loadingRepos ? (
-                  <div className="flex flex-col items-center py-6">
-                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                  </div>
-                ) : linkedRepos.length === 0 ? (
-                  <div className="rounded-lg border border-dashed p-8 text-center">
-                    <p className="text-sm text-muted-foreground">No repositories linked yet</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {linkedRepos.map((repo) => (
-                      <div key={repo.id} className="flex items-center justify-between rounded-lg border p-3">
-                        <div className="flex items-center gap-2">
-                          <GitBranch className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-sm font-medium">{repo.fullName}</span>
-                        </div>
+                <div className="flex items-center justify-between rounded-lg border p-4 bg-accent/20">
+                  <div className="flex items-center gap-3">
+                    <Github className="h-8 w-8 text-muted-foreground" />
+                    <div>
+                      <p className="text-base font-semibold">{linkedRepos[0].fullName}</p>
+                      <div className="flex items-center gap-2 mt-1">
                         <Badge variant="outline" className="text-[10px] text-success border-success/30">Active</Badge>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Repository Linking */}
-          {availableRepos.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Available Repositories</CardTitle>
-                <CardDescription>Select a repository to link it to this team</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {availableRepos.map((repo) => (
-                    <div key={repo.id} className="flex items-center justify-between rounded-lg border p-3 hover:bg-accent/50 transition-colors">
-                      <div className="flex-1 min-w-0 pr-2">
-                        <p className="text-sm font-medium truncate">{repo.name}</p>
-                        <p className="text-[10px] text-muted-foreground truncate">{repo.fullName}</p>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        className="h-8 shrink-0"
-                        onClick={() => handleLinkRepo(repo.id)}
-                        disabled={linkingRepo === repo.id}
-                      >
-                        {linkingRepo === repo.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Link'}
-                      </Button>
                     </div>
-                  ))}
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => setShowRepoSelector(true)}>
+                    Change Repository
+                  </Button>
                 </div>
               </CardContent>
             </Card>
+          ) : (
+            <div className="space-y-6">
+              {linkedRepos.length > 0 && (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-medium text-foreground">Change Connected Repository</h3>
+                    <p className="text-sm text-muted-foreground">Linking a new repository will replace "{linkedRepos[0].fullName}"</p>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={() => setShowRepoSelector(false)}>Cancel</Button>
+                </div>
+              )}
+              
+              <div className="grid gap-6 md:grid-cols-2">
+                {/* GitHub Connect */}
+                <Card className="flex flex-col">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#24292e] text-white">
+                          <Github className="h-6 w-6" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-lg">GitHub App</CardTitle>
+                          <CardDescription>Direct integration via GitHub App</CardDescription>
+                        </div>
+                      </div>
+                      <Button variant="ghost" size="icon" onClick={loadGitHubData} disabled={loadingRepos}>
+                        <RefreshCw className={cn("h-4 w-4", loadingRepos && "animate-spin")} />
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="flex-1 space-y-4">
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      Install our GitHub App on your account or organization to allow VSM to track commits, PRs, and branch activities.
+                    </p>
+                    <Button variant="outline" className="w-full gap-2" onClick={handleConnectGitHub}>
+                      <ExternalLink className="h-4 w-4" />
+                      Install / Manage GitHub App
+                    </Button>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Repository Linking */}
+              {availableRepos.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Available Repositories</CardTitle>
+                    <CardDescription>Select a repository to link it to this team</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      {availableRepos.map((repo) => (
+                        <div key={repo.id} className="flex items-center justify-between rounded-lg border p-3 hover:bg-accent/50 transition-colors">
+                          <div className="flex-1 min-w-0 pr-2">
+                            <p className="text-sm font-medium truncate">{repo.name}</p>
+                            <p className="text-[10px] text-muted-foreground truncate">{repo.fullName}</p>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="h-8 shrink-0"
+                            onClick={async () => {
+                              await handleLinkRepo(repo.id);
+                              setShowRepoSelector(false);
+                            }}
+                            disabled={linkingRepo === repo.id}
+                          >
+                            {linkingRepo === repo.id ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Link'}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
           )}
         </TabsContent>
       </Tabs>

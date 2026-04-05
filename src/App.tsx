@@ -74,6 +74,7 @@ const App = () => (
                     <Route path="/projects/:projectId/teams/:teamId/backlog" element={<Index />} />
                     <Route path="/projects/:projectId/teams/:teamId/task/:taskId" element={<Index />} />
                     <Route path="/projects/:projectId/teams/:teamId/settings" element={<SettingsPage />} />
+                    <Route path="/projects/:projectId/teams/:teamId/team" element={<TeamPage />} />
                     <Route path="/settings" element={<SettingsPage />} />
                   </Route>
                   <Route path="*" element={<NotFound />} />
