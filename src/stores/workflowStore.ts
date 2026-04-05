@@ -20,6 +20,7 @@ export interface Task {
   assignee_id?: string;
   assignee_name?: string;
   priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  order?: number;
   pr_status?: string;
   ci_status?: string;
   ai_signals?: string[];
@@ -65,6 +66,7 @@ interface WorkflowState {
   loading: boolean;
   error: string | null;
   selectedTaskId: string | null;
+  isTaskEditMode: boolean;
   teamId: string | null;
 
   // Core fetches
@@ -75,14 +77,20 @@ interface WorkflowState {
 
   // Task actions
   setSelectedTask: (id: string | null) => void;
+  setIsTaskEditMode: (val: boolean) => void;
   updateTaskStatus: (taskId: string, newStatusId: string) => Promise<void>;
   updateTaskSprint: (taskId: string, sprintId: string | null) => Promise<void>;
   createTask: (title: string, statusId?: string, sprintId?: string) => Promise<void>;
   updateTaskAssignee: (taskId: string, assigneeId: string | null) => Promise<void>;
+  updateTaskPriority: (taskId: string, priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL') => Promise<void>;
+  updateTaskOrder: (taskId: string, sprintId: string | null, newOrder: number) => Promise<void>;
+  updateTaskDetails: (taskId: string, data: { title: string; description: string }) => Promise<void>;
   deleteTask: (taskId: string) => Promise<void>;
 
   // Sprint CRUD
   createSprint: (name: string, goal?: string, startDate?: string, endDate?: string) => Promise<Sprint | null>;
+  updateSprint: (sprintId: string, data: { name?: string; goal?: string; startDate?: string; endDate?: string }) => Promise<void>;
+  deleteSprint: (sprintId: string) => Promise<void>;
 
   // Sprint lifecycle (Jira-style)
   startSprint: (sprintId: string, data: { goal?: string; startDate?: string; endDate?: string }) => Promise<void>;
@@ -100,9 +108,12 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   loading: false,
   error: null,
   selectedTaskId: null,
+  isTaskEditMode: false,
   teamId: null,
 
-  setTeamId: (teamId) => set({ teamId }),
+  setTeamId: (id) => set({ teamId: id }),
+  setSelectedTask: (id) => set({ selectedTaskId: id }),
+  setIsTaskEditMode: (val) => set({ isTaskEditMode: val }),
 
   // ─────────────────────────────────────────────────────────────────────────
   // FETCHES
@@ -148,6 +159,8 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
         status_name: t.currentStatus?.name,
         status_category: t.currentStatus?.category,
         assignee_id: t.assigneeId ? String(t.assigneeId) : undefined,
+        priority: t.priority as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | undefined,
+        order: t.order ?? 1000,
         created_at: t.createdAt,
         updated_at: t.updatedAt,
       }));
@@ -219,8 +232,6 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   // TASK ACTIONS
   // ─────────────────────────────────────────────────────────────────────────
 
-  setSelectedTask: (id) => set({ selectedTaskId: id }),
-
   updateTaskStatus: async (taskId, newStatusId) => {
     try {
       const teamId = get().teamId;
@@ -274,12 +285,67 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     try {
       const teamId = get().teamId;
       if (!teamId) throw new Error('No team selected');
-      await api.updateTask(taskId, teamId, { assignee_id: assigneeId ? Number(assigneeId) : null });
+      
+      // Optimistic update
       set((state) => ({
-        tasks: state.tasks.map((t) => t.id === taskId ? { ...t, assignee_id: assigneeId || undefined } : t)
+        tasks: state.tasks.map((t) => t.id === taskId ? { ...t, assignee_id: assigneeId ? String(assigneeId) : undefined } : t)
       }));
+
+      await api.updateTask(taskId, teamId, { assignee_id: assigneeId ? Number(assigneeId) : null });
     } catch (e: any) {
       set({ error: e.message });
+      console.warn("API Error during task assignee update but state was optimistically updated");
+    }
+  },
+
+  updateTaskPriority: async (taskId, priority) => {
+    try {
+      const teamId = get().teamId;
+      if (!teamId) throw new Error('No team selected');
+
+      // Optimistic update
+      set((state) => ({
+        tasks: state.tasks.map((t) => t.id === taskId ? { ...t, priority } : t)
+      }));
+
+      await api.updateTask(taskId, teamId, { priority });
+    } catch (e: any) {
+      set({ error: e.message });
+      console.warn("API Error during task priority update but state was optimistically updated");
+    }
+  },
+
+  updateTaskOrder: async (taskId, sprintId, newOrder) => {
+    try {
+      const teamId = get().teamId;
+      if (!teamId) throw new Error('No team selected');
+
+      // Optimistic update
+      set((state) => ({
+        tasks: state.tasks.map((t) => t.id === taskId ? { ...t, sprint_id: sprintId ?? undefined, order: newOrder } : t)
+      }));
+
+      await api.updateTask(taskId, teamId, { sprint_id: sprintId ? Number(sprintId) : null, order: newOrder });
+    } catch (e: any) {
+      set({ error: e.message });
+      console.warn("API Error during task order update but state was optimistically updated");
+    }
+  },
+
+  updateTaskDetails: async (taskId, data) => {
+    try {
+      const teamId = get().teamId;
+      if (!teamId) throw new Error('No team selected');
+
+      // Optimistic update
+      set((state) => ({
+        tasks: state.tasks.map((t) => t.id === taskId ? { ...t, ...data } : t)
+      }));
+
+      await api.updateTask(taskId, teamId, data);
+    } catch (e: any) {
+      set({ error: e.message });
+      console.error("Failed to update task details", e);
     }
   },
 
@@ -336,6 +402,37 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     } catch (e: any) {
       set({ error: e.message });
       return null;
+    }
+  },
+
+  updateSprint: async (sprintId, data) => {
+    try {
+      const teamId = get().teamId;
+      if (!teamId) throw new Error('No team selected');
+      
+      // Optimistic update
+      set((state) => ({
+        sprints: state.sprints.map((s) => s.id === sprintId ? { ...s, ...data } : s)
+      }));
+
+      await api.updateSprint(teamId, sprintId, data);
+    } catch (e: any) {
+      set({ error: e.message });
+      await get().fetchSprints();
+    }
+  },
+
+  deleteSprint: async (sprintId) => {
+    try {
+      const teamId = get().teamId;
+      if (!teamId) throw new Error('No team selected');
+      
+      set((state) => ({ sprints: state.sprints.filter(s => s.id !== sprintId) }));
+      await api.deleteSprint(teamId, sprintId);
+      await get().fetchTasks(); // Reload tasks since any tasks in the deleted sprint move to backlog
+    } catch (e: any) {
+      set({ error: e.message });
+      await get().fetchSprints();
     }
   },
 

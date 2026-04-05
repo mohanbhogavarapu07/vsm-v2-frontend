@@ -65,8 +65,8 @@ export function AppSidebar() {
   return (
     <aside
       className={cn(
-        'flex h-screen flex-col border-r border-sidebar-border bg-card transition-all duration-200',
-        collapsed ? 'w-16' : 'w-60'
+        'flex h-screen flex-col border-r border-sidebar-border bg-card shadow-soft z-20 transition-all duration-300 ease-in-out',
+        collapsed ? 'w-16' : 'w-64'
       )}
     >
       {/* Header */}
@@ -122,13 +122,16 @@ export function AppSidebar() {
           <button
             onClick={() => navigate('/projects')}
             className={cn(
-              'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+              'group relative flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all duration-200',
               location.pathname === '/projects'
-                ? 'bg-primary/10 text-primary'
+                ? 'bg-primary/10 text-primary shadow-sm'
                 : 'text-muted-foreground hover:bg-accent hover:text-foreground'
             )}
           >
-            <FolderKanban className="h-4 w-4 shrink-0" />
+            {location.pathname === '/projects' && (
+              <div className="absolute left-0 top-1/2 h-2/3 w-1 -translate-y-1/2 rounded-r-md bg-primary" />
+            )}
+            <FolderKanban className="h-4 w-4 shrink-0 transition-transform group-hover:scale-110" />
             {!collapsed && <span>Projects</span>}
           </button>
         )}
@@ -139,14 +142,17 @@ export function AppSidebar() {
               key={item.path}
               onClick={() => navigate(item.path)}
               className={cn(
-                'flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                'group relative flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-all duration-200',
                 isActive
-                  ? 'bg-primary/10 text-primary'
+                  ? 'bg-primary/10 text-primary shadow-sm'
                   : 'text-muted-foreground hover:bg-accent hover:text-foreground',
                 item.className
               )}
             >
-              <item.icon className="h-4 w-4 shrink-0" />
+              {isActive && (
+                <div className="absolute left-0 top-1/2 h-2/3 w-1 -translate-y-1/2 rounded-r-md bg-primary" />
+              )}
+              <item.icon className="h-4 w-4 shrink-0 transition-transform group-hover:scale-110" />
               {!collapsed && <span>{item.label}</span>}
             </button>
           );

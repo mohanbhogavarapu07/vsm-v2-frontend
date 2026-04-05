@@ -92,9 +92,9 @@ export const api = {
   // ── Tasks (team-scoped via query) ──────────────────────────────────────────
   listTasks: (teamId: string, limit = 50, offset = 0) =>
     apiRequest<any[]>('/tasks', {}, { team_id: teamId, limit, offset }),
-  createTask: (teamId: string, data: { title: string; description?: string; sprint_id?: number | null; current_status_id?: number | null; assignee_id?: number | null }) =>
+  createTask: (teamId: string, data: { title: string; description?: string; sprint_id?: number | null; current_status_id?: number | null; assignee_id?: number | null; priority?: string }) =>
     apiRequest<any>('/tasks', { method: 'POST', body: JSON.stringify({ team_id: Number(teamId), ...data }) }, { team_id: teamId }),
-  updateTask: (taskId: string, teamId: string, data: { title?: string; description?: string; sprint_id?: number | null; current_status_id?: number | null; assignee_id?: number | null }) =>
+  updateTask: (taskId: string, teamId: string, data: { title?: string; description?: string; sprint_id?: number | null; current_status_id?: number | null; assignee_id?: number | null; priority?: string; order?: number }) =>
     apiRequest<any>(`/tasks/${taskId}`, { method: 'PATCH', body: JSON.stringify(data) }, { team_id: teamId }),
   deleteTask: (taskId: string, teamId: string) =>
     apiRequest<void>(`/tasks/${taskId}`, { method: 'DELETE' }, { team_id: teamId }),
@@ -116,6 +116,8 @@ export const api = {
     apiRequest<any>(`/teams/${teamId}/sprints/`, { method: 'POST', body: JSON.stringify(data) }),
   updateSprint: (teamId: string, sprintId: string, data: { name?: string; goal?: string; startDate?: string; endDate?: string }) =>
     apiRequest<any>(`/teams/${teamId}/sprints/${sprintId}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteSprint: (teamId: string, sprintId: string) =>
+    apiRequest<void>(`/teams/${teamId}/sprints/${sprintId}`, { method: 'DELETE' }),
 
   // Sprint lifecycle
   startSprint: (teamId: string, sprintId: string, data: { goal?: string; startDate?: string; endDate?: string }) =>
