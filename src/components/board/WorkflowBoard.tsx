@@ -51,6 +51,7 @@ export function WorkflowBoard() {
   const [linkedRepos, setLinkedRepos] = useState<any[]>([]);
   const [availableRepos, setAvailableRepos] = useState<any[]>([]);
   const [loadingRepos, setLoadingRepos] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [linkingRepo, setLinkingRepo] = useState<number | null>(null);
 
   const activeSprints = sprints.filter((s) => s.status === 'ACTIVE');
@@ -108,19 +109,24 @@ export function WorkflowBoard() {
     const boot = async () => {
       if (!projectId) return;
 
+      const teamId = currentTeamId || (await ensureDefaultTeam(projectId));
+      
       // Handle GitHub redirection status
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('status') === 'github_success') {
         toast.success('GitHub App installed and repositories synced!');
         setCurrentTab('code'); // Auto-switch to Code tab to show available repos
+        loadGitHubData(teamId); // Ensure data is reloaded immediately
+        
         // Remove the query param from URL without refreshing
-        window.history.replaceState({}, document.title, window.location.pathname);
+        const newUrl = window.location.pathname + (teamId ? `?team_id=${teamId}` : '');
+        window.history.replaceState({}, document.title, newUrl);
       } else if (urlParams.get('status') === 'github_error') {
         toast.error('Failed to complete GitHub installation.');
-        window.history.replaceState({}, document.title, window.location.pathname);
+        const newUrl = window.location.pathname + (teamId ? `?team_id=${teamId}` : '');
+        window.history.replaceState({}, document.title, newUrl);
       }
 
-      const teamId = currentTeamId || (await ensureDefaultTeam(projectId));
       setTeamId(teamId);
       
       const promises: Promise<any>[] = [
@@ -144,11 +150,25 @@ export function WorkflowBoard() {
 
   const handleConnectGitHub = async () => {
     try {
-      const { url } = await api.getGitHubInstallUrl(currentTeamId || undefined);
-      window.open(url, '_blank');
-      toast.info('Installation window opened. Click Refresh after completing installation.');
+      const { url } = await api.getGitHubInstallUrl(currentTeamId || undefined, window.location.origin);
+      // Seamless redirection in the same window
+      window.location.href = url;
     } catch (err) {
       toast.error('Failed to get installation URL');
+    }
+  };
+
+  const handleSyncRepos = async () => {
+    if (!currentTeamId) return;
+    setSyncing(true);
+    try {
+      const data = await api.syncGitHubRepositories(currentTeamId);
+      toast.success(data.message || 'Repositories synced');
+      await loadGitHubData(currentTeamId);
+    } catch (err) {
+      toast.error('Failed to sync repositories');
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -605,11 +625,13 @@ export function WorkflowBoard() {
                     <div className="text-center py-6 bg-muted/10 rounded-lg border border-dashed">
                       <p className="text-xs text-muted-foreground">No available repositories found.</p>
                       <Button 
-                        variant="link" 
-                        className="text-[10px] h-auto p-0 mt-1" 
+                        variant="outline" 
+                        size="sm"
+                        className="mt-3 gap-2" 
                         onClick={() => currentTeamId && loadGitHubData(currentTeamId)}
                       >
-                        Click to refresh
+                        <RefreshCw className="h-3 w-3" />
+                        Refresh Repositories
                       </Button>
                     </div>
                   ) : (

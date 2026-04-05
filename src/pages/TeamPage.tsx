@@ -97,6 +97,29 @@ export default function TeamPage() {
     }
   }, [projectId, currentTeamId]);
 
+  // Handle callback status from URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('status') === 'github_success') {
+      toast.success('GitHub integration completed successfully!');
+      loadGitHubData();
+      
+      // Clean up URL
+      const newParams = new URLSearchParams(window.location.search);
+      newParams.delete('status');
+      const newUrl = window.location.pathname + (newParams.toString() ? `?${newParams.toString()}` : '');
+      window.history.replaceState({}, '', newUrl);
+    } else if (params.get('status') === 'github_error') {
+      toast.error('GitHub integration failed. Please try again.');
+      
+      // Clean up URL
+      const newParams = new URLSearchParams(window.location.search);
+      newParams.delete('status');
+      const newUrl = window.location.pathname + (newParams.toString() ? `?${newParams.toString()}` : '');
+      window.history.replaceState({}, '', newUrl);
+    }
+  }, [projectId, currentTeamId]);
+
   const loadGitHubData = async () => {
     const teamId = currentTeamId || (projectId ? await ensureDefaultTeam(projectId) : null);
     if (!teamId) return;
@@ -105,7 +128,7 @@ export default function TeamPage() {
     try {
       const [linked, available] = await Promise.all([
         api.getTeamGitHubRepositories(teamId),
-        api.listGitHubRepositories()
+        api.listGitHubRepositories(teamId)
       ]);
       setLinkedRepos(linked);
       // Filter out already linked repos from available list if needed, or just show all
@@ -119,9 +142,9 @@ export default function TeamPage() {
 
   const handleConnectGitHub = async () => {
     try {
-      const { url } = await api.getGitHubInstallUrl();
-      window.open(url, '_blank');
-      toast.info('Installation window opened. Click Refresh after completing installation.');
+      const { url } = await api.getGitHubInstallUrl(currentTeamId || undefined, window.location.origin);
+      // Redirect in the same window for a seamless callback flow
+      window.location.href = url;
     } catch (err) {
       toast.error('Failed to get installation URL');
     }
