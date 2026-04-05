@@ -7,6 +7,7 @@ import { KanbanColumn } from './KanbanColumn';
 import { BacklogView } from './BacklogView';
 import { TaskDetailPanel } from './TaskDetailPanel';
 import { CompleteSprintModal } from './SprintModals';
+import { SummaryBoard } from './SummaryBoard';
 import {
   Loader2, AlertCircle, RefreshCw, Search, Plus, MoreHorizontal,
   Layout, Code2, Presentation, Calendar, Share2, Zap, CheckCircle2, Users,
@@ -154,7 +155,12 @@ export function WorkflowBoard() {
 
       if (currentTab === 'activity') promises.push(fetchEvents(teamId));
       if (currentTab === 'decisions') promises.push(fetchAIDecisions());
+<<<<<<< HEAD
+      if (currentTab === 'summary' || currentTab === 'team') {
+        promises.push(fetchMembers(projectId));
+=======
       if (currentTab === 'team') {
+>>>>>>> 6df51b6f69a4ee87ad8ac5817aeb8c25a223ba37
         promises.push(fetchRoles(projectId));
       }
       if (currentTab === 'code') promises.push(loadGitHubData(teamId));
@@ -484,44 +490,7 @@ export function WorkflowBoard() {
             <BacklogView />
           </div>
         ) : currentTab === 'summary' ? (
-          <div className="h-full overflow-y-auto p-6 max-w-5xl mx-auto space-y-6">
-            <div className="grid gap-4 md:grid-cols-3">
-              <Card className="bg-primary/5 border-primary/20">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium">Active Sprint</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-2xl font-bold">{activeSprint?.name || 'None'}</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-success/5 border-success/20">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium">Completed Tasks</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-2xl font-bold">{tasks.filter(t => t.status_category === 'DONE').length}</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-warning/5 border-warning/20">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium">In Progress</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-2xl font-bold">{tasks.filter(t => t.status_category === 'ACTIVE').length}</p>
-                </CardContent>
-              </Card>
-            </div>
-            
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Team Velocity</CardTitle>
-                <CardDescription>Performance over the last 30 days</CardDescription>
-              </CardHeader>
-              <CardContent className="h-40 flex items-center justify-center text-muted-foreground italic">
-                Velocity data will populate as more tasks are completed.
-              </CardContent>
-            </Card>
-          </div>
+          <SummaryBoard onNavigateToBoard={() => setCurrentTab('board')} />
         ) : currentTab === 'activity' ? (
           <div className="h-full overflow-y-auto p-6 space-y-2 scrollbar-thin">
             {events.length === 0 ? (

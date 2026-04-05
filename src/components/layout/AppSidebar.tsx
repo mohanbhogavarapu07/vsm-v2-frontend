@@ -2,25 +2,30 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useAuthStore } from '@/stores/authStore';
 import { useProjectStore } from '@/stores/projectStore';
 import {
-  KanbanSquare,
-  Activity,
   Bot,
   Settings,
   LogOut,
   ChevronLeft,
   ChevronRight,
-  Users,
   FolderKanban,
   ArrowLeft,
+  User,
+  ChevronUp,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
 
 export function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { projectId, teamId } = useParams<{ projectId: string; teamId?: string }>();
@@ -42,11 +47,13 @@ export function AppSidebar() {
   const hasPermission = (perm: string) => permissions.includes(perm);
 
   const userMeta = user?.user_metadata as Record<string, any> | undefined;
-  const initials = userMeta?.full_name
-    ?.split(' ')
+  const fullName = userMeta?.full_name || 'User';
+  const initials = fullName
+    .split(' ')
     .map((n: string) => n[0])
     .join('')
-    .toUpperCase() || user?.email?.[0]?.toUpperCase() || '?';
+    .toUpperCase()
+    .slice(0, 2) || user?.email?.[0]?.toUpperCase() || '?';
 
   let projectNav: any[] = [];
   if (projectId && permissions.includes('MANAGE_TEAM')) {
@@ -161,32 +168,108 @@ export function AppSidebar() {
 
       <Separator />
 
-      {/* User */}
+      {/* ── Account Section (Jira-style popover) ─────────────────────── */}
       <div className="p-2">
-        <div className="flex items-center gap-3 rounded-md px-3 py-2">
-          <Avatar className="h-8 w-8 shrink-0">
-            <AvatarFallback className="bg-primary/10 text-xs text-primary">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
-          {!collapsed && (
-            <div className="flex-1 truncate">
-              <p className="truncate text-sm font-medium text-foreground">
-                {userMeta?.full_name || 'User'}
-              </p>
-              <p className="truncate text-xs text-muted-foreground">{user?.email}</p>
+        <Popover open={accountOpen} onOpenChange={setAccountOpen}>
+          <PopoverTrigger asChild>
+            <button
+              className={cn(
+                'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 transition-colors',
+                'hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                accountOpen && 'bg-accent/60'
+              )}
+            >
+              <Avatar className="h-8 w-8 shrink-0 ring-2 ring-primary/20">
+                <AvatarFallback className="bg-orange-500 text-[11px] font-bold text-white">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              {!collapsed && (
+                <>
+                  <div className="flex-1 truncate text-left">
+                    <p className="truncate text-sm font-medium text-foreground leading-tight">
+                      {fullName}
+                    </p>
+                    <p className="truncate text-[11px] text-muted-foreground leading-tight">
+                      {user?.email}
+                    </p>
+                  </div>
+                  <ChevronUp
+                    className={cn(
+                      'h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200',
+                      !accountOpen && 'rotate-180'
+                    )}
+                  />
+                </>
+              )}
+            </button>
+          </PopoverTrigger>
+
+          <PopoverContent
+            side={collapsed ? 'right' : 'top'}
+            align={collapsed ? 'end' : 'start'}
+            sideOffset={8}
+            className="w-72 p-0 rounded-xl shadow-xl border border-border/60"
+          >
+            {/* Avatar header section */}
+            <div className="flex items-center gap-3.5 px-5 py-4">
+              <Avatar className="h-12 w-12 shrink-0 ring-2 ring-orange-400/30">
+                <AvatarFallback className="bg-orange-500 text-base font-bold text-white">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-foreground">
+                  {fullName}
+                </p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {user?.email}
+                </p>
+              </div>
             </div>
-          )}
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={signOut}
-          className={cn('w-full justify-start text-muted-foreground', collapsed && 'justify-center')}
-        >
-          <LogOut className="h-4 w-4 shrink-0" />
-          {!collapsed && <span className="ml-2">Sign Out</span>}
-        </Button>
+
+            <Separator />
+
+            {/* Menu items */}
+            <div className="py-1.5">
+              <button
+                onClick={() => {
+                  setAccountOpen(false);
+                  navigate('/settings');
+                }}
+                className="flex w-full items-center gap-3 px-5 py-2.5 text-sm text-foreground hover:bg-accent/60 transition-colors"
+              >
+                <User className="h-4 w-4 text-muted-foreground" />
+                Profile
+              </button>
+              <button
+                onClick={() => {
+                  setAccountOpen(false);
+                  navigate('/settings');
+                }}
+                className="flex w-full items-center gap-3 px-5 py-2.5 text-sm text-foreground hover:bg-accent/60 transition-colors"
+              >
+                <Settings className="h-4 w-4 text-muted-foreground" />
+                Account settings
+              </button>
+            </div>
+
+            <Separator />
+
+            <div className="py-1.5">
+              <button
+                onClick={() => {
+                  setAccountOpen(false);
+                  signOut();
+                }}
+                className="flex w-full items-center gap-3 px-5 py-2.5 text-sm text-foreground hover:bg-accent/60 transition-colors"
+              >
+                <LogOut className="h-4 w-4 text-muted-foreground" />
+                Log out
+              </button>
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Collapse toggle */}
