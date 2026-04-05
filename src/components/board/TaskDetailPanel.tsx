@@ -8,6 +8,7 @@ import { X, GitCommit, GitPullRequest, CheckCircle2, XCircle, Bot, Activity, Mes
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
@@ -17,6 +18,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 
 interface TaskDetailPanelProps {
   taskId: string;
@@ -26,10 +29,50 @@ interface TaskDetailPanelProps {
 export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
   const { projectId } = useParams<{ projectId: string }>();
   const { currentTeamId, ensureDefaultTeam, members, permissions } = useProjectStore();
-  const { tasks, updateTaskAssignee } = useWorkflowStore();
+  const { tasks, updateTaskAssignee, updateTaskDetails, isTaskEditMode, setIsTaskEditMode } = useWorkflowStore();
   const task = tasks.find((t) => t.id === taskId);
   const [activities, setActivities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const [editTitle, setEditTitle] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Close the panel and reset edit mode globally
+  const handleClose = () => {
+    setIsTaskEditMode(false);
+    
+    // Smoothly drop the URL task ID routing
+    const newPath = window.location.pathname.replace(/\/task\/[^/]+/, '');
+    window.history.pushState({}, '', newPath || '/');
+    
+    onClose();
+  };
+
+  // Sync state when task changes or edit mode toggles
+  useEffect(() => {
+    if (task) {
+      setEditTitle(task.title);
+      setEditDesc(task.description || '');
+    }
+  }, [task, isTaskEditMode]);
+
+  const handleSave = async () => {
+    if (!editTitle.trim()) {
+      toast.error('Task title is required');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      await updateTaskDetails(taskId, { title: editTitle, description: editDesc });
+      toast.success('Task details updated');
+      setIsTaskEditMode(false);
+    } catch (e: any) {
+      toast.error(e.message || 'Failed to update task');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -60,11 +103,27 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
     >
       {/* Header */}
       <div className="flex items-center justify-between border-b border-border px-6 py-4">
-        <div>
-          <p className="text-xs text-muted-foreground">Task #{task.id}</p>
-          <h2 className="text-lg font-semibold text-foreground">{task.title}</h2>
+        <div className="flex-1 mr-4">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-muted-foreground font-mono">Task #{task.id}</p>
+            {!isTaskEditMode && permissions.includes('UPDATE_TASK') && (
+              <Button variant="link" size="sm" className="h-auto p-0 text-xs" onClick={() => setIsTaskEditMode(true)}>
+                Edit Task
+              </Button>
+            )}
+          </div>
+          {isTaskEditMode ? (
+            <Input 
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              className="mt-1 font-semibold text-lg"
+              autoFocus
+            />
+          ) : (
+            <h2 className="text-lg font-semibold text-foreground mt-1">{task.title}</h2>
+          )}
         </div>
-        <Button variant="ghost" size="icon" onClick={onClose}>
+        <Button variant="ghost" size="icon" onClick={handleClose} className="shrink-0 self-start">
           <X className="h-4 w-4" />
         </Button>
       </div>
@@ -79,16 +138,37 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
           </TabsList>
 
           <TabsContent value="info" className="space-y-4">
-            {task.description && (
+            {isTaskEditMode ? (
+              <div className="space-y-4 mb-6 relative">
+                <div>
+                  <h3 className="mb-1 text-xs font-semibold uppercase text-muted-foreground">Description</h3>
+                  <Textarea 
+                    value={editDesc}
+                    onChange={(e) => setEditDesc(e.target.value)}
+                    className="min-h-[100px] resize-y text-sm"
+                    placeholder="Add a more detailed description..."
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={handleSave} disabled={isSaving || !editTitle.trim()}>
+                    {isSaving ? 'Saving...' : 'Save Changes'}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setIsTaskEditMode(false)} disabled={isSaving}>
+                    Cancel
+                  </Button>
+                </div>
+                <Separator className="my-4" />
+              </div>
+            ) : task.description && (
               <div>
                 <h3 className="mb-1 text-xs font-semibold uppercase text-muted-foreground">Description</h3>
-                <p className="text-sm text-foreground">{task.description}</p>
+                <p className="text-sm text-foreground whitespace-pre-wrap">{task.description}</p>
               </div>
             )}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <h3 className="mb-1 text-xs font-semibold uppercase text-muted-foreground">Status</h3>
-                <Badge variant="secondary">{task.status_name || task.status_id}</Badge>
+                <Badge variant="secondary" className="mt-1">{task.status_name || task.status_id || 'Unknown'}</Badge>
               </div>
               <div>
                 <h3 className="mb-1 text-xs font-semibold uppercase text-muted-foreground">Assignee</h3>
@@ -111,12 +191,27 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
                   </SelectContent>
                 </Select>
               </div>
-              {task.priority && (
-                <div>
-                  <h3 className="mb-1 text-xs font-semibold uppercase text-muted-foreground">Priority</h3>
-                  <Badge variant="outline" className="uppercase">{task.priority}</Badge>
-                </div>
-              )}
+              <div>
+                <h3 className="mb-1 text-xs font-semibold uppercase text-muted-foreground">Priority</h3>
+                <Select
+                  value={task.priority || 'MEDIUM'}
+                  onValueChange={(val: any) => updateTaskDetails(task.id, { priority: val } as any)}
+                  disabled={!permissions.includes('UPDATE_TASK')}
+                >
+                  <SelectTrigger className={cn(
+                    "h-8 text-[13px] border-transparent -ml-3 transition-colors max-w-[150px]",
+                    permissions.includes('UPDATE_TASK') ? "hover:border-border" : "cursor-default border-none shadow-none focus:ring-0"
+                  )}>
+                    <SelectValue placeholder="Priority" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="LOW">Low</SelectItem>
+                    <SelectItem value="MEDIUM">Medium</SelectItem>
+                    <SelectItem value="HIGH">High</SelectItem>
+                    <SelectItem value="CRITICAL">Critical</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div>
                 <h3 className="mb-1 text-xs font-semibold uppercase text-muted-foreground">Created</h3>
                 <p className="text-sm text-foreground">
