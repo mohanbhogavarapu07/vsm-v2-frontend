@@ -155,12 +155,10 @@ export function WorkflowBoard() {
 
       if (currentTab === 'activity') promises.push(fetchEvents(teamId));
       if (currentTab === 'decisions') promises.push(fetchAIDecisions());
-<<<<<<< HEAD
       if (currentTab === 'summary' || currentTab === 'team') {
         promises.push(fetchMembers(projectId));
-=======
+      }
       if (currentTab === 'team') {
->>>>>>> 6df51b6f69a4ee87ad8ac5817aeb8c25a223ba37
         promises.push(fetchRoles(projectId));
       }
       if (currentTab === 'code') promises.push(loadGitHubData(teamId));
