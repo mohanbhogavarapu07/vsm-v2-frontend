@@ -7,6 +7,7 @@ import { KanbanColumn } from './KanbanColumn';
 import { BacklogView } from './BacklogView';
 import { TaskDetailPanel } from './TaskDetailPanel';
 import { CompleteSprintModal } from './SprintModals';
+import { SummaryBoard } from './SummaryBoard';
 import {
   Loader2, AlertCircle, RefreshCw, Search, Plus, MoreHorizontal,
   Layout, Code2, Presentation, Calendar, Share2, Zap, CheckCircle2, Users,
@@ -60,6 +61,7 @@ export function WorkflowBoard() {
   const [linkedRepos, setLinkedRepos] = useState<any[]>([]);
   const [availableRepos, setAvailableRepos] = useState<any[]>([]);
   const [loadingRepos, setLoadingRepos] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [linkingRepo, setLinkingRepo] = useState<number | null>(null);
 
   const activeSprints = sprints.filter((s) => s.status === 'ACTIVE');
@@ -124,19 +126,24 @@ export function WorkflowBoard() {
     const boot = async () => {
       if (!projectId) return;
 
+      const teamId = currentTeamId || (await ensureDefaultTeam(projectId));
+      
       // Handle GitHub redirection status
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('status') === 'github_success') {
         toast.success('GitHub App installed and repositories synced!');
         setCurrentTab('code'); // Auto-switch to Code tab to show available repos
+        loadGitHubData(teamId); // Ensure data is reloaded immediately
+        
         // Remove the query param from URL without refreshing
-        window.history.replaceState({}, document.title, window.location.pathname);
+        const newUrl = window.location.pathname + (teamId ? `?team_id=${teamId}` : '');
+        window.history.replaceState({}, document.title, newUrl);
       } else if (urlParams.get('status') === 'github_error') {
         toast.error('Failed to complete GitHub installation.');
-        window.history.replaceState({}, document.title, window.location.pathname);
+        const newUrl = window.location.pathname + (teamId ? `?team_id=${teamId}` : '');
+        window.history.replaceState({}, document.title, newUrl);
       }
 
-      const teamId = currentTeamId || (await ensureDefaultTeam(projectId));
       setTeamId(teamId);
       
       const promises: Promise<any>[] = [
@@ -148,6 +155,9 @@ export function WorkflowBoard() {
 
       if (currentTab === 'activity') promises.push(fetchEvents(teamId));
       if (currentTab === 'decisions') promises.push(fetchAIDecisions());
+      if (currentTab === 'summary' || currentTab === 'team') {
+        promises.push(fetchMembers(projectId));
+      }
       if (currentTab === 'team') {
         promises.push(fetchRoles(projectId));
       }
@@ -189,11 +199,25 @@ export function WorkflowBoard() {
 
   const handleConnectGitHub = async () => {
     try {
-      const { url } = await api.getGitHubInstallUrl(currentTeamId || undefined);
-      window.open(url, '_blank');
-      toast.info('Installation window opened. Click Refresh after completing installation.');
+      const { url } = await api.getGitHubInstallUrl(currentTeamId || undefined, window.location.origin);
+      // Seamless redirection in the same window
+      window.location.href = url;
     } catch (err) {
       toast.error('Failed to get installation URL');
+    }
+  };
+
+  const handleSyncRepos = async () => {
+    if (!currentTeamId) return;
+    setSyncing(true);
+    try {
+      const data = await api.syncGitHubRepositories(currentTeamId);
+      toast.success(data.message || 'Repositories synced');
+      await loadGitHubData(currentTeamId);
+    } catch (err) {
+      toast.error('Failed to sync repositories');
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -464,44 +488,7 @@ export function WorkflowBoard() {
             <BacklogView />
           </div>
         ) : currentTab === 'summary' ? (
-          <div className="h-full overflow-y-auto p-6 max-w-5xl mx-auto space-y-6">
-            <div className="grid gap-4 md:grid-cols-3">
-              <Card className="bg-primary/5 border-primary/20">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium">Active Sprint</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-2xl font-bold">{activeSprint?.name || 'None'}</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-success/5 border-success/20">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium">Completed Tasks</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-2xl font-bold">{tasks.filter(t => t.status_category === 'DONE').length}</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-warning/5 border-warning/20">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-medium">In Progress</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-2xl font-bold">{tasks.filter(t => t.status_category === 'ACTIVE').length}</p>
-                </CardContent>
-              </Card>
-            </div>
-            
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Team Velocity</CardTitle>
-                <CardDescription>Performance over the last 30 days</CardDescription>
-              </CardHeader>
-              <CardContent className="h-40 flex items-center justify-center text-muted-foreground italic">
-                Velocity data will populate as more tasks are completed.
-              </CardContent>
-            </Card>
-          </div>
+          <SummaryBoard onNavigateToBoard={() => setCurrentTab('board')} />
         ) : currentTab === 'activity' ? (
           <div className="h-full overflow-y-auto p-6 space-y-2 scrollbar-thin">
             {events.length === 0 ? (
@@ -671,11 +658,13 @@ export function WorkflowBoard() {
                     <div className="text-center py-6 bg-muted/10 rounded-lg border border-dashed">
                       <p className="text-xs text-muted-foreground">No available repositories found.</p>
                       <Button 
-                        variant="link" 
-                        className="text-[10px] h-auto p-0 mt-1" 
+                        variant="outline" 
+                        size="sm"
+                        className="mt-3 gap-2" 
                         onClick={() => currentTeamId && loadGitHubData(currentTeamId)}
                       >
-                        Click to refresh
+                        <RefreshCw className="h-3 w-3" />
+                        Refresh Repositories
                       </Button>
                     </div>
                   ) : (

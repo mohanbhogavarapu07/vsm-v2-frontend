@@ -76,7 +76,8 @@ export function AppSidebar() {
     ?.split(' ')
     .map((n: string) => n[0])
     .join('')
-    .toUpperCase() || user?.email?.[0]?.toUpperCase() || '?';
+    .toUpperCase()
+    .slice(0, 2) || user?.email?.[0]?.toUpperCase() || '?';
 
   // Determine which project context to show
   const activeProjectId = projectId || lastProjectId;

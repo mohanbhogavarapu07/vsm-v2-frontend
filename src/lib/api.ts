@@ -156,12 +156,15 @@ export const api = {
   myPermissions: (teamId: string) => apiRequest<{ permissions: string[] }>('/me/permissions', undefined, { team_id: teamId }),
 
   // ── GitHub App Integration ────────────────────────────────────────────────
-  getGitHubInstallUrl: (teamId?: string) => apiRequest<{ url: string }>('/integrations/github/install', {}, { team_id: teamId }),
+  getGitHubInstallUrl: (teamId?: string, returnUrl?: string) => 
+    apiRequest<{ url: string }>('/integrations/github/install', {}, { team_id: teamId, return_url: returnUrl }),
   listGitHubRepositories: (teamId: string) => apiRequest<any[]>('/integrations/github/repositories', {}, { team_id: teamId }),
   linkGitHubRepository: (teamId: string, repositoryId: number) =>
-    apiRequest<any>('/integrations/github/link', { method: 'POST', body: JSON.stringify({ repository_id: repositoryId }) }, { team_id: teamId }),
+    apiRequest<any>('/integrations/github/link', { method: 'POST', body: JSON.stringify({ repositoryId }) }, { team_id: teamId }),
   getTeamGitHubRepositories: (teamId: string) =>
     apiRequest<any[]>(`/integrations/github/team/${teamId}`),
+  syncGitHubRepositories: (teamId: string) =>
+    apiRequest<any>('/integrations/github/sync', { method: 'POST' }, { team_id: teamId }),
   
   // ── Public Invitations ────────────────────────────────────────────────────
   getInvitationDetails: (invitationId: string) => 
