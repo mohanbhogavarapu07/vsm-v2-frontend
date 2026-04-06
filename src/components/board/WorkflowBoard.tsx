@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { DragDropContext, type DropResult } from '@hello-pangea/dnd';
 import { useWorkflowStore } from '@/stores/workflowStore';
 import { useProjectStore } from '@/stores/projectStore';
@@ -11,8 +12,25 @@ import { SummaryBoard } from './SummaryBoard';
 import {
   Loader2, AlertCircle, RefreshCw, Search, Plus, MoreHorizontal,
   Layout, Code2, Presentation, Calendar, Share2, Zap, CheckCircle2, Users,
-  Activity, Bot, Shield, Github, GitBranch, ExternalLink, Mail, UserPlus,
+  Activity, Bot, Shield, Github, GitBranch, ExternalLink, Mail, UserPlus, UserMinus,
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { AIDecisionCard } from '@/components/ai/AIDecisionCard';
@@ -55,7 +73,12 @@ export function WorkflowBoard() {
   // Activity & Decisions state
   const [events, setEvents] = useState<any[]>([]);
   const { aiDecisions, fetchAIDecisions } = useWorkflowStore();
-  const { members, fetchMembers, roles, fetchRoles } = useProjectStore();
+  const { 
+    members, fetchMembers, roles, fetchRoles, 
+    updateMemberRole, removeMember 
+  } = useProjectStore();
+  
+  const [memberToRemove, setMemberToRemove] = useState<string | null>(null);
 
   // GitHub Integration State
   const [linkedRepos, setLinkedRepos] = useState<any[]>([]);
@@ -574,47 +597,126 @@ export function WorkflowBoard() {
             )}
           </div>
         ) : currentTab === 'team' ? (
-          <div className="h-full overflow-y-auto p-6 max-w-4xl mx-auto">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Users className="h-5 w-5 text-primary" />
-                  Team Members ({members.length})
-                </CardTitle>
-                <CardDescription>Manage members for this specific team</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {members.length === 0 ? (
-                  <p className="text-center py-8 text-sm text-muted-foreground">No team members yet</p>
-                ) : (
-                  members.map((member) => {
+          <div className="h-full overflow-y-auto scrollbar-thin">
+            <div className="max-w-4xl mx-auto p-6 transition-all duration-300">
+              <div className="mb-6">
+                <h3 className="text-xl font-bold text-foreground">Team Management</h3>
+                <p className="text-sm text-muted-foreground">Manage members and their roles for this team</p>
+              </div>
+
+              {members.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 rounded-xl border-2 border-dashed border-muted/50 bg-muted/5">
+                  <Users className="h-12 w-12 text-muted-foreground/20 mb-4" />
+                  <p className="text-base font-medium text-muted-foreground">No team members found</p>
+                  <p className="text-sm text-muted-foreground/60 mt-1">Invite your colleagues to start collaborating</p>
+                </div>
+              ) : (
+                <motion.div 
+                  initial="hidden"
+                  animate="visible"
+                  variants={{
+                    visible: { transition: { staggerChildren: 0.05 } }
+                  }}
+                  className="grid gap-3"
+                >
+                  {members.map((member, i) => {
                     const memberRole = roles.find((r) => r.id === member.role_id);
+                    const initials = member.full_name
+                      ? member.full_name.split(' ').map((w: string) => w[0]).join('').substring(0, 2).toUpperCase()
+                      : member.email.substring(0, 2).toUpperCase();
+                    
+                    const avatarColors = [
+                      'bg-indigo-500', 'bg-teal-500', 'bg-orange-500', 'bg-pink-500',
+                      'bg-violet-500', 'bg-cyan-500', 'bg-rose-500', 'bg-emerald-500',
+                    ];
+                    const colorIndex = i % avatarColors.length;
+                    
                     return (
-                      <div key={member.id} className="flex items-center justify-between rounded-lg border p-3">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-                            {member.full_name?.[0]?.toUpperCase() || member.email[0]?.toUpperCase()}
+                      <motion.div
+                        key={member.id}
+                        variants={{
+                          hidden: { opacity: 0, y: 10 },
+                          visible: { opacity: 1, y: 0 }
+                        }}
+                        className="group flex items-center justify-between rounded-xl border border-border/50 bg-card p-4 shadow-sm transition-all duration-200 hover:border-primary/30 hover:shadow-md"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className={cn(
+                            "flex h-12 w-12 items-center justify-center rounded-full text-white text-sm font-bold shadow-sm ring-4 ring-background transition-transform duration-200 group-hover:scale-105",
+                            avatarColors[colorIndex]
+                          )}>
+                            {initials}
                           </div>
                           <div>
-                            <p className="text-sm font-medium">{member.full_name || member.email}</p>
-                            <p className="text-xs text-muted-foreground">{member.email}</p>
+                            <h4 className="text-sm font-bold text-foreground group-hover:text-primary transition-colors">
+                              {member.full_name || member.email.split('@')[0]}
+                            </h4>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <Mail className="h-3 w-3 text-muted-foreground/60" />
+                              <p className="text-xs text-muted-foreground font-medium">{member.email}</p>
+                            </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="secondary" className="text-xs">{memberRole?.name || '—'}</Badge>
-                          <Badge variant="outline" className={cn(
-                            'text-xs',
-                            member.status === 'ACTIVE' ? 'border-success/30 text-success' : 'border-warning/30 text-warning'
-                          )}>
+
+                        <div className="flex items-center gap-3">
+                          <Badge 
+                            variant="outline" 
+                            className="hidden sm:flex rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-secondary/30 text-secondary-foreground border-none"
+                          >
+                            {memberRole?.name || 'Member'}
+                          </Badge>
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              'rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider border-none',
+                              member.status === 'ACTIVE' ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'
+                            )}
+                          >
                             {member.status}
                           </Badge>
+                          
+                          {permissions.includes('MANAGE_TEAM') && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-56 p-1.5">
+                                <div className="px-2 py-1.5 mb-1">
+                                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Manage Permission</p>
+                                </div>
+                                {roles.map((r) => (
+                                  <DropdownMenuItem
+                                    key={r.id}
+                                    onClick={() => projectId && updateMemberRole(projectId, member.id, r.id)}
+                                    className={cn(
+                                      "flex items-center gap-2.5 py-2 cursor-pointer transition-colors",
+                                      member.role_id === r.id ? 'bg-primary/5 text-primary font-semibold' : 'hover:bg-accent'
+                                    )}
+                                  >
+                                    <Shield className={cn("h-4 w-4", member.role_id === r.id ? "text-primary" : "text-muted-foreground/60")} />
+                                    <span>Set as {r.name}</span>
+                                  </DropdownMenuItem>
+                                ))}
+                                <DropdownMenuSeparator className="my-1.5" />
+                                <DropdownMenuItem
+                                  className="flex items-center gap-2.5 py-2 text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer"
+                                  onClick={() => setMemberToRemove(member.id)}
+                                >
+                                  <UserMinus className="h-4 w-4" />
+                                  <span>Remove from Team</span>
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
                         </div>
-                      </div>
+                      </motion.div>
                     );
-                  })
-                )}
-              </CardContent>
-            </Card>
+                  })}
+                </motion.div>
+              )}
+            </div>
           </div>
         ) : currentTab === 'code' ? (
           <div className="h-full overflow-y-auto p-6 max-w-5xl mx-auto space-y-6">
@@ -764,6 +866,32 @@ export function WorkflowBoard() {
           projectId={projectId}
         />
       )}
+
+      {/* ── Remove Member Confirmation Dialog ────────────────────────── */}
+      <AlertDialog open={!!memberToRemove} onOpenChange={() => setMemberToRemove(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Team Member</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove this member from the team? They will lose access to all project resources.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={async () => {
+                if (memberToRemove && projectId) {
+                   await removeMember(projectId, memberToRemove);
+                   setMemberToRemove(null);
+                }
+              }}
+            >
+              Remove Member
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

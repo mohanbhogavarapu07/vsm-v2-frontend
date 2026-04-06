@@ -319,79 +319,143 @@ export default function TeamPage() {
             </Card>
           )}
 
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Users className="h-4 w-4" />
-                Team Members ({members.length})
-              </CardTitle>
+          <Card className="border-none shadow-none bg-transparent">
+            <CardHeader className="px-0 pb-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-xl font-bold flex items-center gap-2.5 text-foreground">
+                    <Users className="h-5 w-5 text-primary/80" />
+                    Team Members
+                    <Badge variant="secondary" className="ml-1 rounded-full px-2 py-0.5 text-xs font-semibold bg-primary/10 text-primary border-none">
+                      {members.length}
+                    </Badge>
+                  </CardTitle>
+                  <CardDescription className="mt-1 text-sm text-muted-foreground/80 font-inter">
+                    Manage permissions and member access for this project team
+                  </CardDescription>
+                </div>
+              </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-0">
               {members.length === 0 ? (
-                <p className="text-center py-8 text-sm text-muted-foreground">No team members yet</p>
+                <div className="flex flex-col items-center justify-center py-12 rounded-xl border-2 border-dashed border-muted/50 bg-muted/5">
+                  <Users className="h-10 w-10 text-muted-foreground/30 mb-3" />
+                  <p className="text-sm font-medium text-muted-foreground">Your team is empty</p>
+                  <p className="text-xs text-muted-foreground/60 mt-1 uppercase tracking-wider font-semibold">Invite members to collaborate</p>
+                </div>
               ) : (
-                <div className="space-y-2">
-                  {members.map((member) => {
+                <motion.div 
+                  initial="hidden"
+                  animate="visible"
+                  variants={{
+                    visible: { transition: { staggerChildren: 0.05 } }
+                  }}
+                  className="grid gap-3"
+                >
+                  {members.map((member, i) => {
                     const memberRole = roles.find((r) => r.id === member.role_id);
+                    const initials = member.full_name
+                      ? member.full_name.split(' ').map((w: string) => w[0]).join('').substring(0, 2).toUpperCase()
+                      : member.email.substring(0, 2).toUpperCase();
+                    
+                    const avatarColors = [
+                      'bg-indigo-500', 'bg-teal-500', 'bg-orange-500', 'bg-pink-500',
+                      'bg-violet-500', 'bg-cyan-500', 'bg-rose-500', 'bg-emerald-500',
+                    ];
+                    const colorIndex = i % avatarColors.length;
+                    const avatarColorClass = avatarColors[colorIndex];
+
                     return (
-                      <div key={member.id} className="flex items-center justify-between rounded-lg border p-3">
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
-                            {member.full_name?.[0]?.toUpperCase() || member.email[0]?.toUpperCase()}
+                      <motion.div
+                        key={member.id}
+                        variants={{
+                          hidden: { opacity: 0, y: 10 },
+                          visible: { opacity: 1, y: 0 }
+                        }}
+                        className="group relative flex items-center justify-between rounded-xl border border-border/50 bg-card p-4 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] transition-all duration-200 hover:border-primary/30 hover:shadow-[0_8px_20px_-6px_rgba(0,0,0,0.08)]"
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className={cn(
+                            "flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-white text-sm font-bold shadow-sm ring-4 ring-background transition-transform duration-200 group-hover:scale-105",
+                            avatarColorClass
+                          )}>
+                            {initials}
                           </div>
-                          <div>
-                            <p className="text-sm font-medium">{member.full_name || member.email}</p>
-                            <p className="text-xs text-muted-foreground">{member.email}</p>
+                          <div className="min-w-0">
+                            <h4 className="text-sm font-bold text-foreground truncate group-hover:text-primary transition-colors">
+                              {member.full_name || member.email.split('@')[0]}
+                            </h4>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <Mail className="h-3 w-3 text-muted-foreground/60" />
+                              <p className="text-xs text-muted-foreground font-medium truncate">{member.email}</p>
+                            </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Badge variant="secondary" className="text-xs">{memberRole?.name || '—'}</Badge>
-                          {memberRole && getAccessBadge(memberRole.access_level)}
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              'text-xs',
-                              member.status === 'ACTIVE' ? 'border-success/30 text-success' :
-                              member.status === 'INVITED' ? 'border-warning/30 text-warning' :
-                              'border-destructive/30 text-destructive'
-                            )}
-                          >
-                            {member.status}
-                          </Badge>
+
+                        <div className="flex items-center gap-3">
+                          <div className="hidden sm:flex items-center gap-2">
+                            <Badge 
+                              variant="outline" 
+                              className="h-6 rounded-full px-2.5 py-0 text-[10px] font-bold uppercase tracking-wider bg-secondary/30 text-secondary-foreground border-transparent border-none"
+                            >
+                              {memberRole?.name || 'No Role'}
+                            </Badge>
+                            {memberRole && getAccessBadge(memberRole.access_level)}
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                'h-6 rounded-full px-2.5 py-0 text-[10px] font-bold uppercase tracking-wider border-none',
+                                member.status === 'ACTIVE' 
+                                  ? 'bg-success/10 text-success' 
+                                  : member.status === 'INVITED' 
+                                  ? 'bg-warning/10 text-warning' 
+                                  : 'bg-destructive/10 text-destructive font-semibold'
+                              )}
+                            >
+                              {member.status}
+                            </Badge>
+                          </div>
+                          
                           {canManage && (
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8">
-                                  <MoreHorizontal className="h-4 w-4" />
+                                <Button variant="ghost" size="icon" className="h-9 w-9 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <MoreHorizontal className="h-5 w-5 text-muted-foreground" />
                                 </Button>
                               </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
+                              <DropdownMenuContent align="end" className="w-56 p-1.5">
+                                <div className="px-2 py-1.5 mb-1.5">
+                                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Manage Permission</p>
+                                </div>
                                 {roles.map((r) => (
                                   <DropdownMenuItem
                                     key={r.id}
                                     onClick={() => projectId && updateMemberRole(projectId, member.id, r.id)}
-                                    className={cn(member.role_id === r.id && 'bg-accent')}
+                                    className={cn(
+                                      "flex items-center gap-2.5 py-2 cursor-pointer transition-colors",
+                                      member.role_id === r.id ? 'bg-primary/5 text-primary font-semibold' : 'hover:bg-accent'
+                                    )}
                                   >
-                                    <Shield className="mr-2 h-3 w-3" />
-                                    Set as {r.name}
+                                    <Shield className={cn("h-4 w-4", member.role_id === r.id ? "text-primary" : "text-muted-foreground/60")} />
+                                    <span>Set as {r.name}</span>
                                   </DropdownMenuItem>
                                 ))}
-                                <DropdownMenuSeparator />
+                                <DropdownMenuSeparator className="my-1.5" />
                                 <DropdownMenuItem
-                                  className="text-destructive"
+                                  className="flex items-center gap-2.5 py-2 text-destructive focus:bg-destructive/10 focus:text-destructive cursor-pointer"
                                   onClick={() => setRemoveMemberId(member.id)}
                                 >
-                                  <UserMinus className="mr-2 h-3 w-3" />
-                                  Remove
+                                  <UserMinus className="h-4 w-4" />
+                                  <span>Remove from Team</span>
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
                           )}
                         </div>
-                      </div>
+                      </motion.div>
                     );
                   })}
-                </div>
+                </motion.div>
               )}
             </CardContent>
           </Card>
