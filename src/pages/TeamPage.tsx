@@ -86,7 +86,10 @@ export default function TeamPage() {
   // GitHub Integration State
   const [linkedRepos, setLinkedRepos] = useState<any[]>([]);
   const [availableRepos, setAvailableRepos] = useState<any[]>([]);
-  const [loadingRepos, setLoadingRepos] = useState(false);
+  const [loadingRepos, setLoadingRepos] = useState(true);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [isGitHubCallbackProcessing, setIsGitHubCallbackProcessing] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [linkingRepo, setLinkingRepo] = useState<number | null>(null);
   const [showRepoSelector, setShowRepoSelector] = useState(false);
 
@@ -102,8 +105,23 @@ export default function TeamPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get('status') === 'github_success') {
-      toast.success('GitHub integration completed successfully!');
-      loadGitHubData();
+      toast.success('GitHub App installed! Syncing repositories...');
+      
+      const runPolling = async () => {
+        setIsGitHubCallbackProcessing(true);
+        try {
+          for (let i = 0; i < 5; i++) { // Poll up to 5 times (total ~12.5s)
+            const { linked, available } = await loadGitHubData();
+            if (linked.length > 0 || available.length > 0) {
+              break; // Exit exactly when data populates
+            }
+            await new Promise(r => setTimeout(r, 2500));
+          }
+        } finally {
+          setIsGitHubCallbackProcessing(false);
+        }
+      };
+      runPolling();
       
       // Clean up URL
       const newParams = new URLSearchParams(window.location.search);
@@ -123,7 +141,7 @@ export default function TeamPage() {
 
   const loadGitHubData = async () => {
     const teamId = currentTeamId || (projectId ? await ensureDefaultTeam(projectId) : null);
-    if (!teamId) return;
+    if (!teamId) return { linked: [], available: [] };
 
     setLoadingRepos(true);
     try {
@@ -131,23 +149,45 @@ export default function TeamPage() {
         api.getTeamGitHubRepositories(teamId),
         api.listGitHubRepositories(teamId)
       ]);
-      setLinkedRepos(linked);
-      // Filter out already linked repos from available list if needed, or just show all
-      setAvailableRepos(available.filter(r => !r.teamId));
+      const avail = (available || []).filter((r: any) => !r.teamId);
+      setLinkedRepos(linked || []);
+      setAvailableRepos(avail);
+      return { linked: linked || [], available: avail };
     } catch (err) {
       console.error('Failed to load GitHub data', err);
+      return { linked: [], available: [] };
     } finally {
       setLoadingRepos(false);
     }
   };
 
-  const handleConnectGitHub = async () => {
+  const handleSyncRepos = async () => {
+    if (!currentTeamId) return;
+    setSyncing(true);
     try {
-      const { url } = await api.getGitHubInstallUrl(currentTeamId || undefined, window.location.origin);
-      // Redirect in the same window for a seamless callback flow
-      window.location.href = url;
+      const data = await api.syncGitHubRepositories(currentTeamId);
+      toast.success(data.message || 'Repositories synced');
+      await loadGitHubData();
+    } catch (err) {
+      toast.error('Failed to sync repositories');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleConnectGitHub = async (newTab = false) => {
+    setIsConnecting(true);
+    try {
+      const { url } = await api.getGitHubInstallUrl(currentTeamId || undefined, window.location.href);
+      if (newTab) {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      } else {
+        window.location.href = url;
+      }
     } catch (err) {
       toast.error('Failed to get installation URL');
+    } finally {
+      setIsConnecting(false);
     }
   };
 
@@ -500,7 +540,26 @@ export default function TeamPage() {
 
         {/* Integrations Tab */}
         <TabsContent value="integrations" className="space-y-4">
-          {linkedRepos.length > 0 && !showRepoSelector ? (
+          {isGitHubCallbackProcessing ? (
+            <div className="flex flex-col items-center justify-center max-w-sm mx-auto py-16 text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#24292e] text-white shadow-lg mb-6">
+                <Github className="h-8 w-8 animate-pulse text-white/90" />
+              </div>
+              <h2 className="text-xl font-bold text-foreground mb-2">Syncing your Account...</h2>
+              <p className="text-sm text-muted-foreground mb-8">
+                We are securely gathering your available repositories from GitHub.
+              </p>
+              <div className="flex items-center justify-center gap-2 text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Processing installation...
+              </div>
+            </div>
+          ) : loadingRepos ? (
+            <div className="flex h-64 flex-col items-center justify-center rounded-lg border border-dashed bg-muted/20">
+              <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+              <p className="text-sm text-muted-foreground">Syncing repository data...</p>
+            </div>
+          ) : linkedRepos.length > 0 && !showRepoSelector ? (
             <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -533,6 +592,20 @@ export default function TeamPage() {
                 </div>
               </CardContent>
             </Card>
+          ) : availableRepos.length === 0 && linkedRepos.length === 0 ? (
+            <div className="flex flex-col items-center justify-center max-w-sm mx-auto py-16 text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#24292e] text-white shadow-lg mb-6">
+                <Github className="h-8 w-8" />
+              </div>
+              <h2 className="text-xl font-bold text-foreground mb-2">Connect GitHub</h2>
+              <p className="text-sm text-muted-foreground mb-8">
+                Install our GitHub App on your account or organization to allow VSM to track commits, PRs, and branch activities.
+              </p>
+              <Button size="lg" className="w-full gap-2 shadow-sm" onClick={() => handleConnectGitHub(false)} disabled={isConnecting}>
+                {isConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+                Connect GitHub Integration
+              </Button>
+            </div>
           ) : (
             <div className="space-y-6">
               {linkedRepos.length > 0 && (
@@ -545,43 +618,23 @@ export default function TeamPage() {
                 </div>
               )}
               
-              <div className="grid gap-6 md:grid-cols-2">
-                {/* GitHub Connect */}
-                <Card className="flex flex-col">
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#24292e] text-white">
-                          <Github className="h-6 w-6" />
-                        </div>
-                        <div>
-                          <CardTitle className="text-lg">GitHub App</CardTitle>
-                          <CardDescription>Direct integration via GitHub App</CardDescription>
-                        </div>
-                      </div>
-                      <Button variant="ghost" size="icon" onClick={loadGitHubData} disabled={loadingRepos}>
-                        <RefreshCw className={cn("h-4 w-4", loadingRepos && "animate-spin")} />
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="flex-1 space-y-4">
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      Install our GitHub App on your account or organization to allow VSM to track commits, PRs, and branch activities.
-                    </p>
-                    <Button variant="outline" className="w-full gap-2" onClick={handleConnectGitHub}>
-                      <ExternalLink className="h-4 w-4" />
-                      Install / Manage GitHub App
-                    </Button>
-                  </CardContent>
-                </Card>
-              </div>
-
               {/* Repository Linking */}
               {availableRepos.length > 0 && (
-                <Card>
+                <Card className={availableRepos.length > 0 && linkedRepos.length > 0 ? "md:col-span-2" : "md:col-span-2"}>
                   <CardHeader>
-                    <CardTitle className="text-base">Available Repositories</CardTitle>
-                    <CardDescription>Select a repository to link it to this team</CardDescription>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="text-base">Available Repositories</CardTitle>
+                        <CardDescription>Select a repository to link it to this team</CardDescription>
+                      </div>
+                      <div className="flex items-center gap-2">
+                      <Button variant="default" size="sm" onClick={() => handleConnectGitHub(true)} title="Manage GitHub App installations">
+                        <ExternalLink className="h-3 w-3 mr-1.5" />
+                        Manage Installations
+                      </Button>
+                      {loadingRepos && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                      </div>
+                    </div>
                   </CardHeader>
                   <CardContent>
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

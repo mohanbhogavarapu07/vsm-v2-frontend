@@ -165,6 +165,8 @@ export const api = {
     apiRequest<any[]>(`/integrations/github/team/${teamId}`),
   syncGitHubRepositories: (teamId: string) =>
     apiRequest<any>('/integrations/github/sync', { method: 'POST' }, { team_id: teamId }),
+  handleGitHubCallback: (installationId: string, setupAction: string, state: string | null) =>
+    apiRequest<any>('/integrations/github/callback', { method: 'GET' }, { installation_id: installationId, setup_action: setupAction, state: state || undefined, from_frontend: true }),
   
   // ── Public Invitations ────────────────────────────────────────────────────
   getInvitationDetails: (invitationId: string) => 

@@ -18,6 +18,7 @@ import ResetPassword from './pages/ResetPassword';
 import AcceptInvitePage from './pages/AcceptInvitePage';
 import HomePage from './pages/HomePage';
 import NotFound from './pages/NotFound';
+import GitHubCallbackPage from './pages/GitHubCallbackPage';
 import { Loader2 } from 'lucide-react';
 
 const queryClient = new QueryClient({
@@ -82,6 +83,7 @@ const App = () => (
                     <Route path="/projects/:projectId/teams/:teamId/task/:taskId" element={<Index />} />
                     <Route path="/projects/:projectId/teams/:teamId/settings" element={<SettingsPage />} />
                     <Route path="/projects/:projectId/teams/:teamId/team" element={<TeamPage />} />
+                    <Route path="/github/callback" element={<GitHubCallbackPage />} />
                     <Route path="/settings" element={<SettingsPage />} />
                   </Route>
                   <Route path="*" element={<NotFound />} />

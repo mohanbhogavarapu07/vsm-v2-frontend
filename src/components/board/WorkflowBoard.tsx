@@ -60,7 +60,9 @@ export function WorkflowBoard() {
   // GitHub Integration State
   const [linkedRepos, setLinkedRepos] = useState<any[]>([]);
   const [availableRepos, setAvailableRepos] = useState<any[]>([]);
-  const [loadingRepos, setLoadingRepos] = useState(false);
+  const [loadingRepos, setLoadingRepos] = useState(true);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [isGitHubCallbackProcessing, setIsGitHubCallbackProcessing] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [linkingRepo, setLinkingRepo] = useState<number | null>(null);
 
@@ -104,10 +106,13 @@ export function WorkflowBoard() {
       ];
       
       const [linked, available] = await Promise.all(promises);
+      const avail = (available || []).filter((r: any) => !r.teamId);
       setLinkedRepos(linked || []);
-      setAvailableRepos((available || []).filter((r: any) => !r.teamId));
+      setAvailableRepos(avail);
+      return { linked: linked || [], available: avail };
     } catch (err) {
       console.error('Failed to load GitHub data', err);
+      return { linked: [], available: [] };
     } finally {
       setLoadingRepos(false);
     }
@@ -131,9 +136,24 @@ export function WorkflowBoard() {
       // Handle GitHub redirection status
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('status') === 'github_success') {
-        toast.success('GitHub App installed and repositories synced!');
+        toast.success('GitHub App installed! Syncing repositories...');
         setCurrentTab('code'); // Auto-switch to Code tab to show available repos
-        loadGitHubData(teamId); // Ensure data is reloaded immediately
+        
+        const runPolling = async () => {
+          setIsGitHubCallbackProcessing(true);
+          try {
+            for (let i = 0; i < 5; i++) { // Poll up to 5 times (total ~12.5s)
+              const { linked, available } = await loadGitHubData(teamId);
+              if (linked.length > 0 || available.length > 0) {
+                break; // Exit exactly when data populates
+              }
+              await new Promise(r => setTimeout(r, 2500));
+            }
+          } finally {
+            setIsGitHubCallbackProcessing(false);
+          }
+        };
+        runPolling();
         
         // Remove the query param from URL without refreshing
         const newUrl = window.location.pathname + (teamId ? `?team_id=${teamId}` : '');
@@ -197,13 +217,19 @@ export function WorkflowBoard() {
     }
   };
 
-  const handleConnectGitHub = async () => {
+  const handleConnectGitHub = async (newTab = false) => {
+    setIsConnecting(true);
     try {
-      const { url } = await api.getGitHubInstallUrl(currentTeamId || undefined, window.location.origin);
-      // Seamless redirection in the same window
-      window.location.href = url;
+      const { url } = await api.getGitHubInstallUrl(currentTeamId || undefined, window.location.href);
+      if (newTab) {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      } else {
+        window.location.href = url;
+      }
     } catch (err) {
       toast.error('Failed to get installation URL');
+    } finally {
+      setIsConnecting(false);
     }
   };
 
@@ -592,35 +618,43 @@ export function WorkflowBoard() {
           </div>
         ) : currentTab === 'code' ? (
           <div className="h-full overflow-y-auto p-6 max-w-5xl mx-auto space-y-6">
-            <div className="grid gap-6 md:grid-cols-2">
-              {permissions.includes('MANAGE_TEAM') && (
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#24292e] text-white">
-                          <Github className="h-6 w-6" />
-                        </div>
-                        <div>
-                          <CardTitle className="text-lg">GitHub App</CardTitle>
-                          <CardDescription>Team Integration</CardDescription>
-                        </div>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <p className="text-sm text-muted-foreground">
-                      Connect this team to GitHub to allow the AI to track PRs and commits.
-                    </p>
-                    <Button variant="outline" className="w-full gap-2" onClick={handleConnectGitHub}>
-                      <ExternalLink className="h-4 w-4" />
-                      Connect GitHub
-                    </Button>
-                  </CardContent>
-                </Card>
-              )}
-
-              <Card>
+            {isGitHubCallbackProcessing ? (
+              <div className="flex flex-col items-center justify-center max-w-sm mx-auto py-20 text-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#24292e] text-white shadow-lg mb-6">
+                  <Github className="h-8 w-8 animate-pulse text-white/90" />
+                </div>
+                <h2 className="text-xl font-bold text-foreground mb-2">Syncing your Account...</h2>
+                <p className="text-sm text-muted-foreground mb-8">
+                  We are securely importing your available GitHub repositories. This usually takes just a few seconds.
+                </p>
+                <div className="flex items-center justify-center gap-2 text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Processing installation...
+                </div>
+              </div>
+            ) : loadingRepos ? (
+              <div className="flex h-64 flex-col items-center justify-center rounded-lg border border-dashed bg-muted/20">
+                <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+                <p className="text-sm text-muted-foreground">Syncing repository data...</p>
+              </div>
+            ) : availableRepos.length === 0 && linkedRepos.length === 0 ? (
+              <div className="flex flex-col items-center justify-center max-w-sm mx-auto py-20 text-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-[#24292e] text-white shadow-lg mb-6">
+                  <Github className="h-8 w-8" />
+                </div>
+                <h2 className="text-xl font-bold text-foreground mb-2">Connect GitHub</h2>
+                <p className="text-sm text-muted-foreground mb-8">
+                  Install our GitHub App on your account or organization to allow VSM to track commits, pull requests, and branch activities for this team.
+                </p>
+                <Button size="lg" className="w-full gap-2 shadow-sm" onClick={() => handleConnectGitHub(false)} disabled={isConnecting}>
+                  {isConnecting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
+                  Connect GitHub Integration
+                </Button>
+              </div>
+            ) : (
+              <>
+                <div className="grid gap-6 md:grid-cols-2">
+                  <Card className={linkedRepos.length > 0 ? "" : "md:col-span-2 max-w-2xl"}>
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center gap-2">
                     <GitBranch className="h-5 w-5 text-primary" />
@@ -645,26 +679,34 @@ export function WorkflowBoard() {
             </div>
             
             {permissions.includes('MANAGE_TEAM') && (
-              <Card>
+              <Card className={availableRepos.length > 0 && linkedRepos.length > 0 ? "md:col-span-2" : ""}>
                 <CardHeader>
-                  <CardTitle className="text-base flex items-center justify-between">
-                    Available Repositories
-                    {loadingRepos && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
-                  </CardTitle>
-                  <CardDescription>Select a repository to link with this team.</CardDescription>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="text-base">Available Repositories</CardTitle>
+                      <CardDescription>Select a repository to link with this team.</CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button variant="default" size="sm" onClick={() => handleConnectGitHub(true)} title="Manage GitHub App installations">
+                        <ExternalLink className="h-3 w-3 mr-1.5" />
+                        Manage Installations
+                      </Button>
+                      {loadingRepos && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   {availableRepos.length === 0 ? (
-                    <div className="text-center py-6 bg-muted/10 rounded-lg border border-dashed">
-                      <p className="text-xs text-muted-foreground">No available repositories found.</p>
+                    <div className="text-center py-6 bg-muted/10 rounded-lg border border-dashed flex flex-col items-center">
+                      <p className="text-sm text-muted-foreground mb-4">No available repositories found.</p>
                       <Button 
                         variant="outline" 
                         size="sm"
-                        className="mt-3 gap-2" 
+                        className="gap-2" 
                         onClick={() => currentTeamId && loadGitHubData(currentTeamId)}
                       >
-                        <RefreshCw className="h-3 w-3" />
-                        Refresh Repositories
+                        <RefreshCw className="h-4 w-4" />
+                        Refresh Status
                       </Button>
                     </div>
                   ) : (
@@ -690,8 +732,10 @@ export function WorkflowBoard() {
                 </CardContent>
               </Card>
             )}
-          </div>
-        ) : null}
+          </>
+        )}
+      </div>
+    ) : null}
       </div>
 
       {/* ── Task Detail Panel ────────────────────────────────────────────── */}
