@@ -171,4 +171,10 @@ export const api = {
     apiRequest<any>(`/invitations/${invitationId}`),
   acceptInvitation: (teamId: string, data: { invitation_id: number; name: string }) =>
     apiRequest<any>(`/teams/${teamId}/invitations/accept`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // ── User Profile ──────────────────────────────────────────────────────────
+  getUserProfile: (email: string) => 
+    apiRequest<any>(`/users/${encodeURIComponent(email)}/profile`),
+  updateUserProfile: (email: string, data: any) =>
+    apiRequest<any>(`/users/${encodeURIComponent(email)}/profile`, { method: 'PUT', body: JSON.stringify(data) }),
 };
