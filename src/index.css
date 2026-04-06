@@ -77,6 +77,74 @@
     --sidebar-border: 214 32% 91%;
     --sidebar-ring: 236 85% 60%;
   }
+
+  .dark {
+    --background: 222 47% 8%;
+    --foreground: 210 40% 92%;
+
+    --card: 222 47% 11%;
+    --card-foreground: 210 40% 92%;
+
+    --popover: 222 47% 11%;
+    --popover-foreground: 210 40% 92%;
+
+    --primary: 236 85% 65%;
+    --primary-foreground: 210 40% 98%;
+
+    --secondary: 222 30% 16%;
+    --secondary-foreground: 210 40% 92%;
+
+    --muted: 222 30% 16%;
+    --muted-foreground: 215 16% 56%;
+
+    --accent: 224 40% 18%;
+    --accent-foreground: 210 40% 92%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 210 40% 98%;
+
+    --success: 142 69% 40%;
+    --success-foreground: 210 40% 98%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --info: 199 89% 48%;
+    --info-foreground: 210 40% 98%;
+
+    --border: 222 30% 20%;
+    --input: 222 30% 20%;
+    --ring: 236 85% 65%;
+
+    --radius: 0.75rem;
+
+    --sidebar-bg: 222 47% 11%;
+    --sidebar-fg: 215 16% 56%;
+    --sidebar-active: 236 85% 65%;
+    --sidebar-active-fg: 210 40% 98%;
+    --sidebar-hover: 222 30% 16%;
+    --sidebar-border: 222 30% 20%;
+
+    --kanban-backlog: 222 30% 14%;
+    --kanban-active: 236 50% 15%;
+    --kanban-review: 38 40% 14%;
+    --kanban-validation: 271 40% 15%;
+    --kanban-done: 142 30% 13%;
+    --kanban-blocked: 0 40% 14%;
+
+    --confidence-high: 142 69% 40%;
+    --confidence-medium: 38 92% 50%;
+    --confidence-low: 0 72% 51%;
+
+    --sidebar-background: 222 47% 11%;
+    --sidebar-foreground: 215 16% 56%;
+    --sidebar-primary: 236 85% 65%;
+    --sidebar-primary-foreground: 210 40% 98%;
+    --sidebar-accent: 224 40% 18%;
+    --sidebar-accent-foreground: 210 40% 92%;
+    --sidebar-border: 222 30% 20%;
+    --sidebar-ring: 236 85% 65%;
+  }
 }
 
 @layer base {

@@ -46,8 +46,7 @@ export function AppSidebar() {
 
   const hasPermission = (perm: string) => permissions.includes(perm);
 
-  const userMeta = user?.user_metadata as Record<string, any> | undefined;
-  const fullName = userMeta?.full_name || 'User';
+  const fullName = user?.name || user?.email?.split('@')[0] || 'User';
   const initials = fullName
     .split(' ')
     .map((n: string) => n[0])
@@ -235,7 +234,7 @@ export function AppSidebar() {
               <button
                 onClick={() => {
                   setAccountOpen(false);
-                  navigate('/settings');
+                  navigate('/settings?tab=profile');
                 }}
                 className="flex w-full items-center gap-3 px-5 py-2.5 text-sm text-foreground hover:bg-accent/60 transition-colors"
               >
@@ -245,7 +244,7 @@ export function AppSidebar() {
               <button
                 onClick={() => {
                   setAccountOpen(false);
-                  navigate('/settings');
+                  navigate('/settings?tab=account');
                 }}
                 className="flex w-full items-center gap-3 px-5 py-2.5 text-sm text-foreground hover:bg-accent/60 transition-colors"
               >
