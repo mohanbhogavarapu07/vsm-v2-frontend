@@ -70,16 +70,10 @@ export function AppSidebar() {
     { path: '#', icon: Bell, label: 'Notifications', active: false },
   ];
 
-<<<<<<< HEAD
-  const fullName = user?.name || user?.email?.split('@')[0] || 'User';
-  const initials = fullName
-    .split(' ')
-=======
   const userMeta = user?.user_metadata as Record<string, any> | undefined;
   const userName = userMeta?.full_name || user?.email?.split('@')[0] || 'User';
   const initials = userName
     ?.split(' ')
->>>>>>> e5ab09b117a7dfd7be4642d1762bea3ec6f864d5
     .map((n: string) => n[0])
     .join('')
     .toUpperCase()
@@ -230,30 +224,6 @@ export function AppSidebar() {
         )}
       </nav>
 
-<<<<<<< HEAD
-            {/* Menu items */}
-            <div className="py-1.5">
-              <button
-                onClick={() => {
-                  setAccountOpen(false);
-                  navigate('/settings?tab=profile');
-                }}
-                className="flex w-full items-center gap-3 px-5 py-2.5 text-sm text-foreground hover:bg-accent/60 transition-colors"
-              >
-                <User className="h-4 w-4 text-muted-foreground" />
-                Profile
-              </button>
-              <button
-                onClick={() => {
-                  setAccountOpen(false);
-                  navigate('/settings?tab=account');
-                }}
-                className="flex w-full items-center gap-3 px-5 py-2.5 text-sm text-foreground hover:bg-accent/60 transition-colors"
-              >
-                <Settings className="h-4 w-4 text-muted-foreground" />
-                Account settings
-              </button>
-=======
       {/* Sidebar Footer */}
       <div className="mt-auto space-y-1 p-2 shrink-0 border-t border-slate-100 bg-white">
         {!collapsed && (
@@ -283,7 +253,6 @@ export function AppSidebar() {
             <div className="flex flex-1 flex-col truncate">
               <span className="truncate text-sm font-medium text-slate-900">{userName}</span>
               <span className="truncate text-[11px] text-slate-500">{user?.email}</span>
->>>>>>> e5ab09b117a7dfd7be4642d1762bea3ec6f864d5
             </div>
           </div>
         )}
