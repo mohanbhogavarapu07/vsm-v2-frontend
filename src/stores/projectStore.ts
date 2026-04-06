@@ -85,6 +85,7 @@ interface ProjectState {
   fetchTeams: (projectId: string) => Promise<void>;
   createTeam: (projectId: string, data: { name: string; copyFromTeamId?: string }) => Promise<Team>;
   updateTeamName: (teamId: string, name: string) => Promise<void>;
+  deleteTeam: (projectId: string, teamId: string) => Promise<void>;
 
   // Roles
   fetchRoles: (projectId: string) => Promise<void>;
@@ -262,7 +263,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
 
-  updateTeamName: async (teamId: string, name: string) => {
+  updateTeamName: async (teamId, name) => {
     try {
       await api.updateTeam(teamId, { name });
       set((state) => ({
@@ -270,6 +271,20 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       }));
     } catch (e: any) {
       set({ error: e.message });
+    }
+  },
+  
+  deleteTeam: async (projectId: string, teamId: string) => {
+    set({ loading: true, error: null });
+    try {
+      await api.deleteTeam(teamId);
+      set((state) => ({
+        teams: state.teams.filter((t) => t.id !== teamId),
+        loading: false,
+      }));
+    } catch (e: any) {
+      set({ error: e.message, loading: false });
+      throw e;
     }
   },
 

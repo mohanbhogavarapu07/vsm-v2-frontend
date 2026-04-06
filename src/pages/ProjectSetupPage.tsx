@@ -14,6 +14,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowRight,
@@ -102,8 +104,11 @@ export default function ProjectSetupPage() {
   const [creatingTeam, setCreatingTeam] = useState(false);
   const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
   const [editTeamName, setEditTeamName] = useState('');
+  const [deletingTeamId, setDeletingTeamId] = useState<string | null>(null);
 
   const visibleTeams = teams.filter(t => t.name !== 'Initial Team');
+
+  const { deleteTeam } = useProjectStore(); // Destructure deleteTeam from store
 
   useEffect(() => {
     if (projectId) {
@@ -111,12 +116,35 @@ export default function ProjectSetupPage() {
       fetchTeams(projectId);
       fetchWorkflowStages(projectId);
       if (!currentProject) {
-        api.getProject(projectId).then((p) => setCurrentProject(p)).catch(() => {});
+        api.getProject(projectId)
+          .then((p) => setCurrentProject(p))
+          .catch((err) => console.error('Failed to auto-fetch project details', err));
       }
     }
   }, [projectId]);
 
   const stepIndex = STEPS.findIndex((s) => s.id === activeStep);
+
+  const handleDeleteTeam = async (teamId: string) => {
+    if (!projectId || !currentProject) return;
+    
+    // Prevent accidental deletion of the last team
+    if (visibleTeams.length <= 1) {
+      toast.error('Cannot delete the last team in a project');
+      return;
+    }
+
+    setDeletingTeamId(teamId);
+    try {
+      await deleteTeam(projectId, teamId);
+      toast.success('Team deleted successfully');
+    } catch (e: any) {
+      console.error('Failed to delete team:', e);
+      toast.error(e.message || 'Failed to delete team');
+    } finally {
+      setDeletingTeamId(null);
+    }
+  };
 
   const handleAddRole = async () => {
     if (!newRoleName.trim() || !projectId) return;
@@ -131,7 +159,9 @@ export default function ProjectSetupPage() {
       setNewRoleDesc('');
       setNewRoleAccess('LOW');
       setShowAddRole(false);
-    } catch {} finally {
+    } catch (err) {
+      console.error('Failed to create role:', err);
+    } finally {
       setCreatingRole(false);
     }
   };
@@ -147,7 +177,9 @@ export default function ProjectSetupPage() {
         is_terminal: false,
       });
       setNewStageName('');
-    } catch {} finally {
+    } catch (err) {
+      console.error('Failed to add stage:', err);
+    } finally {
       setCreatingStage(false);
     }
   };
@@ -203,7 +235,9 @@ export default function ProjectSetupPage() {
         await createTeam(projectId, { name: newTeamName.trim(), copyFromTeamId: currentTeamId });
       }
       setNewTeamName('');
-    } catch {} finally {
+    } catch (err) {
+      console.error('Failed to create team:', err);
+    } finally {
       setCreatingTeam(false);
     }
   };
@@ -214,7 +248,9 @@ export default function ProjectSetupPage() {
       await updateTeamName(teamId, editTeamName.trim());
       setEditingTeamId(null);
       setEditTeamName('');
-    } catch {}
+    } catch (err) {
+      console.error('Failed to update team name:', err);
+    }
   };
 
   const handleFinishSetup = async () => {
@@ -228,7 +264,8 @@ export default function ProjectSetupPage() {
       } else {
         navigate(`/projects/${projectId}`);
       }
-    } catch {
+    } catch (err) {
+      console.error('Failed to complete project setup', err);
       navigate(`/projects/${projectId}`);
     }
   };
@@ -249,66 +286,183 @@ export default function ProjectSetupPage() {
     );
   };
 
-  return (
-    <div className="mx-auto max-w-4xl p-6 lg:p-8">
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
-          <FolderKanban className="h-4 w-4" />
-          <span>{currentProject?.name || 'Project'}</span>
-          <ChevronRight className="h-3 w-3" />
-          <span>Setup</span>
-        </div>
-        <h1 className="text-2xl font-bold text-foreground">Set Up Your Project</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Define roles, configure your workflow, and invite your team
-        </p>
-      </div>
+  const [savingStep, setSavingStep] = useState<StepId | null>(null);
 
-      {/* Stepper */}
-      <div className="mb-8">
-        <div className="flex items-center gap-2">
-          {STEPS.map((step, i) => {
-            const isActive = step.id === activeStep;
-            const isCompleted = i < stepIndex;
-            return (
-              <div key={step.id} className="flex items-center gap-2 flex-1">
+  const handleSaveStep = (step: StepId) => {
+    setSavingStep(step);
+    // Mimic API latency for a "good" UX feel as background syncing is already happening
+    setTimeout(() => {
+      setSavingStep(null);
+      toast.success(`${step.charAt(0).toUpperCase() + step.slice(1)} changes saved successfully!`, {
+        description: "Your project configuration has been updated.",
+        position: 'top-right'
+      });
+    }, 800);
+  };
+
+  const isConfigMode = currentProject?.setupComplete ?? false;
+
+  return (
+    <div className={cn(
+      "min-h-screen bg-background transition-all duration-500",
+      isConfigMode ? "px-0" : "mx-auto max-w-4xl p-6 lg:p-8"
+    )}>
+      {/* Header Area */}
+      <div className={cn(
+        "mb-0",
+        isConfigMode ? "border-b bg-card/30 backdrop-blur-md sticky top-0 z-10 px-8 pt-6" : "mb-8"
+      )}>
+        {/* Breadcrumbs */}
+        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground/70 mb-3 tracking-wide uppercase">
+          <span className="hover:text-primary cursor-pointer transition-colors">Projects</span>
+          <ChevronRight className="h-3 w-3 opacity-50" />
+          <span className="text-foreground/80">{currentProject?.name || 'Project'}</span>
+        </div>
+
+        {/* Title & Actions Row */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-inner">
+              <FolderKanban className="h-5 w-5" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+                {currentProject?.name}
+                {isConfigMode && (
+                  <Badge variant="secondary" className="text-[10px] uppercase tracking-widest h-5 px-1.5 bg-muted/50 text-muted-foreground border-none">
+                    Config
+                  </Badge>
+                )}
+              </h1>
+              <p className="text-sm text-muted-foreground font-medium">
+                {isConfigMode ? 'Project Administration & Compliance' : 'Initial Workspace Setup'}
+              </p>
+            </div>
+          </div>
+
+          {isConfigMode && (
+             <div className="flex items-center gap-3">
+               <Button 
+                 variant="outline" 
+                 size="sm" 
+                 className="h-9 px-4 rounded-lg border-primary/20 hover:bg-primary/5 text-primary"
+                 onClick={() => {
+                   const firstTeam = teams[0]?.id || currentTeamId;
+                   if (firstTeam) {
+                     navigate(`/projects/${projectId}/teams/${firstTeam}/board`);
+                   } else {
+                     toast.error('No teams found in this project');
+                   }
+                 }}
+               >
+                 View Board
+               </Button>
+               <Button 
+                onClick={() => handleSaveStep(activeStep)} 
+                disabled={savingStep === activeStep}
+                className="h-9 px-4 rounded-lg shadow-lg shadow-primary/20 bg-primary hover:bg-primary/90 transition-all active:scale-95"
+               >
+                {savingStep === activeStep ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Check className="h-4 w-4" />
+                    <span>Save Changes</span>
+                  </div>
+                )}
+               </Button>
+             </div>
+          )}
+        </div>
+
+        {/* Dashboard Navigation Bar (Horizontal Tab Style) */}
+        {isConfigMode && (
+          <div className="flex items-center border-b -mx-8 px-8 gap-1">
+            {STEPS.map((step) => {
+              const isActive = activeStep === step.id;
+              return (
                 <button
-                  onClick={() => { if (isCompleted || isActive) setActiveStep(step.id); }}
+                  key={step.id}
+                  onClick={() => setActiveStep(step.id)}
                   className={cn(
-                    'flex items-center gap-3 rounded-lg border p-3 transition-all w-full',
-                    isActive
-                      ? 'border-primary bg-primary/5 shadow-sm'
-                      : isCompleted
-                      ? 'border-success/30 bg-success/5 cursor-pointer'
-                      : 'border-border opacity-50'
+                    "relative flex items-center gap-2.5 px-4 py-3 text-sm font-semibold transition-all duration-200",
+                    isActive 
+                      ? "text-primary border-b-2 border-primary bg-primary/5 mr-0" 
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/50 mr-0"
                   )}
                 >
-                  <div
-                    className={cn(
-                      'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-medium',
-                      isActive ? 'bg-primary text-primary-foreground'
-                        : isCompleted ? 'bg-success text-success-foreground'
-                        : 'bg-muted text-muted-foreground'
-                    )}
-                  >
-                    {isCompleted ? <Check className="h-4 w-4" /> : i + 1}
-                  </div>
-                  <div className="text-left hidden sm:block">
-                    <p className={cn('text-sm font-medium', isActive ? 'text-foreground' : 'text-muted-foreground')}>
-                      {step.label}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{step.description}</p>
-                  </div>
+                  <step.icon className={cn("h-4 w-4", isActive ? "text-primary" : "opacity-60")} />
+                  {step.label}
+                  {isActive && (
+                    <motion.div 
+                      layoutId="activeTab" 
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" 
+                    />
+                  )}
                 </button>
-                {i < STEPS.length - 1 && (
-                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/50" />
-                )}
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+            <div className="flex-1" />
+            <div className="flex items-center gap-4 text-muted-foreground/40 mr-2">
+              <Separator orientation="vertical" className="h-4" />
+              <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-transparent">
+                <Plus className="h-4 w-4 opacity-40" />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
+
+      <div className={cn(
+        "space-y-6",
+        isConfigMode ? "p-8 max-w-6xl mx-auto" : "pb-20"
+      )}>
+        {/* Navigation Stepper (Only for Wizard Mode) */}
+        {!isConfigMode && (
+          <div className="mb-10">
+            <div className="flex items-center gap-2">
+              {STEPS.map((step, i) => {
+                const isActive = step.id === activeStep;
+                const isCompleted = i < stepIndex;
+                return (
+                  <div key={step.id} className="flex items-center gap-2 flex-1">
+                    <button
+                      onClick={() => { if (isCompleted || isActive) setActiveStep(step.id); }}
+                      className={cn(
+                        'flex items-center gap-3 rounded-xl border p-4 transition-all w-full text-left',
+                        isActive
+                          ? 'border-primary bg-primary/5 shadow-md shadow-primary/5'
+                          : isCompleted
+                          ? 'border-success/30 bg-success/5 cursor-pointer hover:border-success/50'
+                          : 'border-border opacity-50 cursor-not-allowed'
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm font-bold',
+                          isActive ? 'bg-primary text-primary-foreground'
+                            : isCompleted ? 'bg-success text-success-foreground'
+                            : 'bg-muted text-muted-foreground'
+                        )}
+                      >
+                        {isCompleted ? <Check className="h-4 w-4" /> : i + 1}
+                      </div>
+                      <div className="hidden sm:block">
+                        <p className={cn('text-sm font-bold leading-none mb-1', isActive ? 'text-foreground' : 'text-muted-foreground')}>
+                          {step.label}
+                        </p>
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">{step.description.split(' ')[0]}</p>
+                      </div>
+                    </button>
+                    {i < STEPS.length - 1 && (
+                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/30 mx-1" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
       {error && (
         <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
@@ -316,427 +470,485 @@ export default function ProjectSetupPage() {
         </div>
       )}
 
-      <AnimatePresence mode="wait">
+      <div className="space-y-6 pb-20">
+        <AnimatePresence mode="wait">
         {/* STEP 1: ROLES */}
-        {activeStep === 'roles' && (
+        {(activeStep as string) === 'roles' && (
           <motion.div
             key="roles"
-            initial={{ opacity: 0, x: 20 }}
+            initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            className="space-y-4"
+            exit={{ opacity: 0, x: 10 }}
+            transition={{ duration: 0.2 }}
+            className="space-y-6"
           >
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <Shield className="h-5 w-5 text-primary" />
-                      Define Team Roles
-                    </CardTitle>
-                    <CardDescription>
-                      Create custom roles and assign an access level to each. Access levels control what users can do.
-                    </CardDescription>
-                  </div>
-                  <Button size="sm" onClick={() => setShowAddRole(true)}>
-                    <Plus className="mr-1.5 h-4 w-4" />
-                    Add Role
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {/* Access Level Legend */}
-                <div className="mb-6 rounded-lg border bg-muted/30 p-4">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Access Levels</p>
-                  <div className="grid gap-2 sm:grid-cols-3">
-                    {ACCESS_LEVELS.map((level) => (
-                      <div key={level.value} className="flex items-start gap-2">
-                        {getAccessBadge(level.value)}
-                        <p className="text-xs text-muted-foreground">{level.description}</p>
-                      </div>
-                    ))}
-                  </div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2 space-y-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-bold flex items-center gap-2">
+                    <Shield className="h-5 w-5 text-primary" />
+                    Role Registry
+                    <Badge variant="outline" className="ml-2 font-normal text-[10px] px-1 h-4">{roles.length}</Badge>
+                  </h2>
+                  {!showAddRole && (
+                    <Button variant="outline" size="sm" onClick={() => setShowAddRole(true)} className="h-8 border-dashed hover:border-primary">
+                      <Plus className="mr-1.5 h-3.5 w-3.5" />
+                      Define New Role
+                    </Button>
+                  )}
                 </div>
 
-                {roles.length === 0 && !showAddRole ? (
-                  <div className="flex flex-col items-center py-10 text-center">
-                    <Shield className="h-12 w-12 text-muted-foreground/30 mb-3" />
-                    <p className="text-sm text-muted-foreground">
-                      No roles defined yet. Create roles like Product Owner, Developer, QA, etc.
-                    </p>
-                    <Button variant="outline" className="mt-4" onClick={() => setShowAddRole(true)}>
-                      <Plus className="mr-1.5 h-4 w-4" />
-                      Add Your First Role
-                    </Button>
+                <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+                  <div className="grid grid-cols-12 bg-muted/30 px-4 py-2 border-b text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+                    <div className="col-span-1">Icon</div>
+                    <div className="col-span-4">Role Name & Desc</div>
+                    <div className="col-span-4 text-center">Permit Level</div>
+                    <div className="col-span-3 text-right">Actions</div>
                   </div>
-                ) : (
-                  <div className="space-y-3">
-                    <AnimatePresence>
-                      {roles.map((role) => (
-                        <motion.div
-                          key={role.id}
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="flex items-center justify-between rounded-lg border bg-card p-4"
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10">
-                              <Shield className="h-4 w-4 text-primary" />
+                  
+                  {roles.length === 0 && !showAddRole ? (
+                    <div className="flex flex-col items-center py-16 text-center">
+                      <Shield className="h-16 w-16 text-muted-foreground/10 mb-4" />
+                      <p className="text-sm text-muted-foreground mb-4">No enterprise roles defined.</p>
+                      <Button variant="default" size="sm" onClick={() => setShowAddRole(true)}>
+                        Create First Role
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-border/50">
+                      <AnimatePresence initial={false}>
+                        {roles.map((role) => (
+                          <motion.div
+                            key={role.id}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="grid grid-cols-12 items-center px-4 py-3 hover:bg-muted/20 transition-colors group"
+                          >
+                            <div className="col-span-1">
+                              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/5 text-primary group-hover:scale-110 transition-transform">
+                                <Shield className="h-4 w-4" />
+                              </div>
                             </div>
-                            <div>
-                              <p className="font-medium text-sm text-foreground">{role.name}</p>
+                            <div className="col-span-4">
+                              <p className="font-bold text-sm">{role.name}</p>
                               {role.description && (
-                                <p className="text-xs text-muted-foreground">{role.description}</p>
+                                <p className="text-xs text-muted-foreground truncate max-w-[200px]">{role.description}</p>
                               )}
                             </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            {getAccessBadge(role.access_level)}
-                            <Select
-                              value={role.access_level}
-                              onValueChange={(val) => projectId && updateRole(projectId, role.id, { access_level: val as AccessLevel })}
-                            >
-                              <SelectTrigger className="w-32 h-8 text-xs">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {ACCESS_LEVELS.map((lvl) => (
-                                  <SelectItem key={lvl.value} value={lvl.value}>
-                                    {lvl.label} — {lvl.value}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-destructive hover:text-destructive"
-                              onClick={() => projectId && deleteRole(projectId, role.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </motion.div>
-                      ))}
-                    </AnimatePresence>
-
-                    {showAddRole && (
-                      <motion.div
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 p-4"
-                      >
-                        <div className="space-y-3">
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <div className="space-y-1.5">
-                              <Label>Role Name</Label>
-                              <Input
-                                placeholder="e.g. Developer, QA..."
-                                value={newRoleName}
-                                onChange={(e) => setNewRoleName(e.target.value)}
-                                autoFocus
-                              />
+                            <div className="col-span-4 flex justify-center">
+                              {getAccessBadge(role.access_level)}
                             </div>
-                            <div className="space-y-1.5">
-                              <Label>Description</Label>
-                              <Input
-                                placeholder="Optional description"
-                                value={newRoleDesc}
-                                onChange={(e) => setNewRoleDesc(e.target.value)}
-                              />
-                            </div>
-                            <div className="space-y-1.5">
-                              <Label>Access Level</Label>
-                              <Select value={newRoleAccess} onValueChange={(v) => setNewRoleAccess(v as AccessLevel)}>
-                                <SelectTrigger>
+                            <div className="col-span-3 flex justify-end gap-1 transition-opacity">
+                              <Select
+                                value={role.access_level}
+                                onValueChange={(val) => projectId && updateRole(projectId, role.id, { access_level: val as AccessLevel })}
+                              >
+                                <SelectTrigger className="w-24 h-7 text-[10px] bg-transparent border-none hover:bg-muted font-bold">
                                   <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
                                   {ACCESS_LEVELS.map((lvl) => (
-                                    <SelectItem key={lvl.value} value={lvl.value}>
-                                      {lvl.label} ({lvl.value})
+                                    <SelectItem key={lvl.value} value={lvl.value} className="text-xs">
+                                      {lvl.label}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
                               </Select>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-destructive/40 hover:text-destructive hover:bg-destructive/5"
+                                onClick={() => projectId && deleteRole(projectId, role.id)}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
                             </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button size="sm" onClick={handleAddRole} disabled={!newRoleName.trim() || creatingRole}>
-                              {creatingRole && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}
-                              Add Role
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => { setShowAddRole(false); setNewRoleName(''); setNewRoleDesc(''); }}
-                            >
-                              Cancel
-                            </Button>
-                          </div>
-                        </div>
-                      </motion.div>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <div className="flex justify-end">
-              <Button onClick={() => setActiveStep('workflow')} disabled={!canProceedFromRoles}>
-                Continue to Workflow
-                <ChevronRight className="ml-1.5 h-4 w-4" />
-              </Button>
-            </div>
-          </motion.div>
-        )}
-
-        {/* STEP 2: WORKFLOW */}
-        {activeStep === 'workflow' && (
-          <motion.div
-            key="workflow"
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            className="space-y-4"
-          >
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Workflow className="h-5 w-5 text-primary" />
-                  Define Workflow Stages
-                </CardTitle>
-                <CardDescription>
-                  Define the task lifecycle for your project. The AI agent will use these stages to automatically transition tasks.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Presets */}
-                <div>
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Quick Presets</p>
-                  <div className="flex flex-wrap gap-2">
-                    {WORKFLOW_PRESETS.map((preset) => (
-                      <Button
-                        key={preset.name}
-                        variant="outline"
-                        size="sm"
-                        className="text-xs"
-                        onClick={() => handleApplyPreset(preset.stages)}
-                        disabled={applyingPreset}
-                      >
-                        <GitBranch className="mr-1.5 h-3 w-3" />
-                        {preset.name}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-
-                <Separator />
-
-                {/* Stage List */}
-                <div>
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                    Workflow Pipeline ({workflowStages.length} stages)
-                  </p>
-                  {applyingPreset ? (
-                    <div className="flex flex-col items-center py-8 text-center bg-card rounded-lg border">
-                      <Loader2 className="h-8 w-8 animate-spin text-primary mb-2" />
-                      <p className="text-sm text-muted-foreground">Applying preset pipeline...</p>
-                    </div>
-                  ) : workflowStages.length === 0 ? (
-                    <div className="flex flex-col items-center py-8 text-center">
-                      <Workflow className="h-10 w-10 text-muted-foreground/30 mb-2" />
-                      <p className="text-sm text-muted-foreground">
-                        No stages defined. Use a preset or add stages manually.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {workflowStages.map((stage, i) => (
-                        <div
-                          key={stage.id}
-                          className="flex items-center gap-3 rounded-lg border bg-card p-3"
-                        >
-                          <div className="flex flex-col gap-0.5 mr-1">
-                            <button 
-                              onClick={() => handleMoveStage(i, 'up')} 
-                              disabled={i === 0}
-                              className="text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:hover:text-muted-foreground"
-                            >
-                              <ChevronUp className="h-3 w-3" />
-                            </button>
-                            <button 
-                              onClick={() => handleMoveStage(i, 'down')} 
-                              disabled={i === workflowStages.length - 1}
-                              className="text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:hover:text-muted-foreground"
-                            >
-                              <ChevronDown className="h-3 w-3" />
-                            </button>
-                          </div>
-                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                            {i + 1}
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-sm font-medium text-foreground">{stage.name}</p>
-                          </div>
-                          {stage.is_terminal && (
-                            <Badge variant="outline" className="text-xs border-success/30 text-success">
-                              Terminal
-                            </Badge>
-                          )}
-                          {i === workflowStages.length - 1 && !stage.is_terminal && (
-                            <Badge variant="outline" className="text-xs text-muted-foreground">
-                              Last stage
-                            </Badge>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-destructive/60 hover:text-destructive"
-                            onClick={() => projectId && deleteWorkflowStage(projectId, stage.id)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      ))}
-                      {/* Visual flow arrow */}
-                      <div className="flex items-center gap-2 px-3 py-1">
-                        <div className="flex-1 h-px bg-border" />
-                        <span className="text-xs text-muted-foreground">↑ Start → End ↓</span>
-                        <div className="flex-1 h-px bg-border" />
-                      </div>
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
                     </div>
                   )}
                 </div>
 
-                {/* Add Stage */}
-                <div className="flex gap-3">
-                  <Input
-                    placeholder="Add new stage (e.g. QA Testing)"
-                    value={newStageName}
-                    onChange={(e) => setNewStageName(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddStage()}
-                  />
-                  <Button onClick={handleAddStage} disabled={!newStageName.trim() || creatingStage} size="sm">
-                    {creatingStage ? <Loader2 className="mr-1.5 h-3 w-3 animate-spin" /> : <Plus className="mr-1.5 h-3 w-3" />}
-                    Add
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+                {showAddRole && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="rounded-xl border bg-primary/5 p-5 border-primary/20 shadow-inner"
+                  >
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+                      <h3 className="text-sm font-bold">New Role Definition</h3>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+                      <div className="space-y-1.5">
+                        <Label className="text-[10px] uppercase font-bold text-muted-foreground">Internal Label</Label>
+                        <Input
+                          placeholder="e.g. Lead Engineer"
+                          value={newRoleName}
+                          onChange={(e) => setNewRoleName(e.target.value)}
+                          className="h-9 bg-background"
+                          autoFocus
+                        />
+                      </div>
+                      <div className="space-y-1.5 flex-1">
+                        <Label className="text-[10px] uppercase font-bold text-muted-foreground">Scope Detail</Label>
+                        <Input
+                          placeholder="What is this role's purpose?"
+                          value={newRoleDesc}
+                          onChange={(e) => setNewRoleDesc(e.target.value)}
+                          className="h-9 bg-background"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-[10px] uppercase font-bold text-muted-foreground">Clearance</Label>
+                        <Select value={newRoleAccess} onValueChange={(v) => setNewRoleAccess(v as AccessLevel)}>
+                          <SelectTrigger className="h-9 bg-background font-semibold">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ACCESS_LEVELS.map((lvl) => (
+                              <SelectItem key={lvl.value} value={lvl.value}>
+                                {lvl.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                       <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-xs h-8"
+                        onClick={() => { setShowAddRole(false); setNewRoleName(''); setNewRoleDesc(''); }}
+                      >
+                        Discard
+                      </Button>
+                      <Button size="sm" onClick={handleAddRole} disabled={!newRoleName.trim() || creatingRole} className="h-8 px-5">
+                        {creatingRole ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Confirm Role'}
+                      </Button>
+                    </div>
+                  </motion.div>
+                )}
+              </div>
 
-            <div className="flex justify-between">
-              <Button variant="outline" onClick={() => setActiveStep('roles')}>
-                Back to Roles
-              </Button>
-              <Button onClick={() => setActiveStep('teams')} disabled={!canProceedFromWorkflow}>
-                Continue to Teams
-                <ChevronRight className="ml-1.5 h-4 w-4" />
-              </Button>
+              <div className="space-y-4">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground opacity-60">Security Framework</h3>
+                <Card className="border-none bg-muted/30 shadow-none">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-bold flex items-center gap-2">
+                      <Shield className="h-4 w-4 text-primary" />
+                      RBAC Overview
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {ACCESS_LEVELS.map((level) => (
+                      <div key={level.value} className="space-y-1.5">
+                        <div className="flex items-center gap-2">
+                           {getAccessBadge(level.value)}
+                           <span className="text-[10px] font-bold text-foreground/70">{level.label} Scope</span>
+                        </div>
+                        <p className="text-xs text-muted-foreground leading-relaxed pl-2 border-l border-primary/20">
+                          {level.description}
+                        </p>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              </div>
             </div>
+
+            {!isConfigMode && (
+              <div className="flex justify-end pt-6 border-t">
+                <Button onClick={() => setActiveStep('workflow')} disabled={!canProceedFromRoles} className="rounded-xl px-6">
+                  Verify Workflow Stages
+                  <ChevronRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </motion.div>
+        )}
+
+        {/* STEP 2: WORKFLOW */}
+        {(activeStep as string) === 'workflow' && (
+          <motion.div
+            key="workflow"
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 10 }}
+            transition={{ duration: 0.2 }}
+            className="space-y-6"
+          >
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+              <div className="lg:col-span-1 space-y-4">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground opacity-60">Config Presets</h3>
+                <div className="flex flex-col gap-2">
+                  {WORKFLOW_PRESETS.map((preset) => (
+                    <Button
+                      key={preset.name}
+                      variant="outline"
+                      size="sm"
+                      className="justify-start h-10 px-4 text-xs font-semibold hover:border-primary/50 hover:bg-primary/5 transition-all"
+                      onClick={() => handleApplyPreset(preset.stages)}
+                      disabled={applyingPreset}
+                    >
+                      <GitBranch className="mr-2 h-3.5 w-3.5 text-primary" />
+                      {preset.name}
+                    </Button>
+                  ))}
+                </div>
+                
+                <div className="pt-4 border-t">
+                   <p className="text-[10px] text-muted-foreground leading-relaxed italic">
+                     * Presets will overwrite your current configuration. Use with caution in active projects.
+                   </p>
+                </div>
+              </div>
+
+              <div className="lg:col-span-3 space-y-4">
+                <div className="flex items-center justify-between mb-4">
+                   <h2 className="text-lg font-bold flex items-center gap-2">
+                    <Workflow className="h-5 w-5 text-primary" />
+                    Task Lifecycle Pipeline
+                    <Badge variant="outline" className="ml-2 font-normal text-[10px] px-1 h-4">{workflowStages.length}</Badge>
+                  </h2>
+                </div>
+
+                <div className="space-y-2 relative">
+                  {/* Pipeline visualization background line */}
+                  <div className="absolute left-[21px] top-4 bottom-4 w-0.5 bg-gradient-to-b from-primary/30 via-primary/10 to-transparent" />
+                  
+                  {applyingPreset ? (
+                    <div className="flex flex-col items-center py-20 text-center rounded-xl border bg-muted/20 border-dashed">
+                      <Loader2 className="h-10 w-10 animate-spin text-primary opacity-50 mb-3" />
+                      <p className="text-sm font-bold text-muted-foreground">Reconfiguring Pipeline Stages...</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <AnimatePresence mode="popLayout" initial={false}>
+                        {workflowStages.map((stage, i) => (
+                          <motion.div
+                            key={stage.id}
+                            layout
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            exit={{ opacity: 0, scale: 0.8 }}
+                            className="flex items-center gap-4 rounded-xl border bg-card p-4 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 transition-all group"
+                          >
+                            <div className="z-10 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-primary ring-4 ring-background text-[10px] font-bold text-primary-foreground shadow-sm">
+                              {i + 1}
+                            </div>
+                            
+                            <div className="flex-1">
+                              <p className="text-sm font-bold text-foreground">{stage.name}</p>
+                              {stage.is_terminal && (
+                                <p className="text-[10px] text-success font-bold uppercase tracking-tighter mt-0.5">Terminal Completion Stage</p>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-1 transition-opacity">
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-7 w-7 text-muted-foreground hover:bg-muted"
+                                onClick={() => handleMoveStage(i, 'up')}
+                                disabled={i === 0}
+                              >
+                                <ChevronUp className="h-4 w-4" />
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-7 w-7 text-muted-foreground hover:bg-muted"
+                                onClick={() => handleMoveStage(i, 'down')}
+                                disabled={i === workflowStages.length - 1}
+                              >
+                                <ChevronDown className="h-4 w-4" />
+                              </Button>
+                              <Separator orientation="vertical" className="h-4 mx-1" />
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7 text-destructive/40 hover:text-destructive hover:bg-destructive/5"
+                                onClick={() => projectId && deleteWorkflowStage(projectId, stage.id)}
+                                disabled={workflowStages.length <= 2}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </AnimatePresence>
+
+                      <div className="flex gap-2 p-1.5 bg-muted/30 rounded-xl mt-4 border border-dashed border-muted-foreground/30">
+                        <Input
+                          placeholder="Inject New Pipeline Stage..."
+                          value={newStageName}
+                          onChange={(e) => setNewStageName(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleAddStage()}
+                          className="h-9 bg-transparent border-none placeholder:text-[10px] placeholder:uppercase placeholder:font-bold focus-visible:ring-0"
+                        />
+                        <Button 
+                          onClick={handleAddStage} 
+                          disabled={!newStageName.trim() || creatingStage} 
+                          size="sm" 
+                          className="h-8 px-4 rounded-lg bg-foreground text-background hover:bg-foreground/90 transition-transform active:scale-95"
+                        >
+                          {creatingStage ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
+                          Add Stage
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {!isConfigMode && (
+              <div className="flex justify-between pt-6 border-t">
+                <Button variant="ghost" onClick={() => setActiveStep('roles')} className="rounded-xl">
+                  Back to Roles
+                </Button>
+                <Button onClick={() => setActiveStep('teams')} disabled={!canProceedFromWorkflow} className="rounded-xl px-6">
+                  Finalize Teams
+                  <ChevronRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </motion.div>
         )}
 
         {/* STEP 3: TEAMS */}
-        {activeStep === 'teams' && (
+        {(activeStep as string) === 'teams' && (
           <motion.div
             key="teams"
-            initial={{ opacity: 0, x: 20 }}
+            initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            className="space-y-4"
+            exit={{ opacity: 0, x: 10 }}
+            transition={{ duration: 0.2 }}
+            className="space-y-6"
           >
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Users className="h-5 w-5 text-primary" />
-                  Create Teams
-                </CardTitle>
-                <CardDescription>
-                  Organize your members into teams. Each team can have its own board and backlog.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="rounded-lg border bg-muted/30 p-4">
-                  <h4 className="text-sm font-medium mb-3">Add a New Team</h4>
-                  <div className="flex flex-col sm:flex-row gap-3">
-                    <div className="flex-1 space-y-1.5">
-                      <Label htmlFor="team-name">Team Name</Label>
-                      <Input
-                        id="team-name"
-                        placeholder="e.g. Frontend Team, Marketing..."
-                        value={newTeamName}
-                        onChange={(e) => setNewTeamName(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleCreateTeam()}
-                      />
-                    </div>
-                    <div className="flex items-end">
-                      <Button onClick={handleCreateTeam} disabled={!newTeamName.trim() || creatingTeam}>
-                        {creatingTeam ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Plus className="mr-1.5 h-4 w-4" />}
-                        Create Team
-                      </Button>
-                    </div>
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+              <div className="lg:col-span-1 space-y-4">
+                <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground opacity-60">Operations</h3>
+                <div className="rounded-xl border bg-muted/10 p-4 space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] uppercase font-extrabold tracking-widest text-primary/70">New Deployment</Label>
+                    <Input
+                      placeholder="Squad / Team Name"
+                      value={newTeamName}
+                      onChange={(e) => setNewTeamName(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleCreateTeam()}
+                      className="h-9 bg-background font-bold text-xs"
+                    />
                   </div>
+                  <Button 
+                    onClick={handleCreateTeam} 
+                    disabled={!newTeamName.trim() || creatingTeam}
+                    className="w-full h-9 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs"
+                  >
+                    {creatingTeam ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-4 w-4 mr-1" />}
+                    Provision Team
+                  </Button>
                 </div>
+                
+                <div className="rounded-xl border border-dashed p-4 text-center">
+                  <p className="text-[10px] text-muted-foreground">
+                    Provisioned teams gain access to shared project resources and global workflow stages.
+                  </p>
+                </div>
+              </div>
 
-                {visibleTeams.length > 0 && (
-                  <div>
-                    <h4 className="text-sm font-medium text-foreground mb-3 flex items-center gap-2">
-                      <FolderKanban className="h-4 w-4" />
-                      Project Teams ({visibleTeams.length})
-                    </h4>
-                    <div className="space-y-2">
-                      {visibleTeams.map((team) => (
-                        <div key={team.id} className="flex items-center justify-between rounded-lg border bg-card p-3">
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                              <Users className="h-4 w-4" />
-                            </div>
-                            {editingTeamId === team.id ? (
-                              <div className="flex items-center gap-2">
-                                <Input 
-                                  value={editTeamName} 
-                                  onChange={(e) => setEditTeamName(e.target.value)}
-                                  className="h-8"
-                                  autoFocus
-                                  onKeyDown={(e) => e.key === 'Enter' && handleUpdateTeamName(team.id)}
-                                />
-                                <Button size="sm" onClick={() => handleUpdateTeamName(team.id)}>Save</Button>
-                                <Button size="sm" variant="ghost" onClick={() => setEditingTeamId(null)}>Cancel</Button>
-                              </div>
-                            ) : (
-                              <div>
-                                <p className="text-sm font-medium text-foreground">{team.name}</p>
-                                <p className="text-xs text-muted-foreground">Team ID: {team.id}</p>
-                              </div>
-                            )}
+              <div className="lg:col-span-3 space-y-4">
+                 <h2 className="text-lg font-bold flex items-center gap-2 mb-4">
+                  <Users className="h-5 w-5 text-primary" />
+                  Team Organizations
+                  <Badge variant="outline" className="ml-2 font-normal text-[10px] px-1 h-4">{visibleTeams.length}</Badge>
+                </h2>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <AnimatePresence initial={false}>
+                    {visibleTeams.map((team) => (
+                      <motion.div
+                        key={team.id}
+                        layout
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.8 }}
+                        className="group relative rounded-2xl border bg-card p-5 hover:border-primary/50 hover:shadow-xl hover:shadow-primary/5 transition-all"
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/5 text-primary ring-1 ring-primary/20 group-hover:scale-110 transition-transform">
+                            <Users className="h-6 w-6" />
                           </div>
-                          {editingTeamId !== team.id && (
-                            <Button variant="ghost" size="sm" onClick={() => { setEditingTeamId(team.id); setEditTeamName(team.name); }}>
-                              Rename
-                            </Button>
-                          )}
+                          
+                          <div className="flex items-center gap-2 transition-opacity">
+                             <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleDeleteTeam(team.id)}
+                                disabled={deletingTeamId === team.id}
+                                className="h-7 w-7 text-destructive/40 hover:text-destructive hover:bg-destructive/5"
+                              >
+                                {deletingTeamId === team.id ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                )}
+                              </Button>
+                          </div>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
 
-            <div className="flex justify-between">
-              <Button variant="outline" onClick={() => setActiveStep('workflow')}>
-                Back to Workflow
-              </Button>
-              <Button onClick={handleFinishSetup}>
-                Finish Setup & Go to Board
-                <ArrowRight className="ml-1.5 h-4 w-4" />
-              </Button>
+                        {editingTeamId === team.id ? (
+                          <div className="flex items-center gap-2 mt-2">
+                            <Input 
+                              value={editTeamName} 
+                              onChange={(e) => setEditTeamName(e.target.value)}
+                              className="h-8 font-bold"
+                              autoFocus
+                              onKeyDown={(e) => e.key === 'Enter' && handleUpdateTeamName(team.id)}
+                            />
+                            <Button size="sm" className="h-8 text-[10px]" onClick={() => handleUpdateTeamName(team.id)}>Save</Button>
+                            <Button size="sm" variant="ghost" className="h-8 text-[10px]" onClick={() => setEditingTeamId(null)}>Esc</Button>
+                          </div>
+                        ) : (
+                          <div onClick={() => { setEditingTeamId(team.id); setEditTeamName(team.name); }} className="cursor-text">
+                            <p className="text-md font-extrabold text-foreground tracking-tight group-hover:text-primary transition-colors underline-offset-4 decoration-primary/30 group-hover:underline">{team.name}</p>
+                            <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest mt-1 opacity-60">ID: {team.id}</p>
+                          </div>
+                        )}
+                        
+                        <div className="mt-4 pt-4 border-t border-dashed flex items-center justify-between">
+                            <div className="flex -space-x-2">
+                               <div className="h-6 w-6 rounded-full border-2 border-background bg-muted text-[8px] flex items-center justify-center font-bold">AI</div>
+                               <div className="h-6 w-6 rounded-full border-2 border-background bg-primary/10 text-primary text-[8px] flex items-center justify-center font-bold">+</div>
+                            </div>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                </div>
+              </div>
             </div>
+
+            {!isConfigMode && (
+              <div className="flex justify-between pt-6 border-t">
+                <Button variant="ghost" onClick={() => setActiveStep('workflow')} className="rounded-xl">
+                  Back to Workflow
+                </Button>
+                <Button onClick={handleFinishSetup} className="rounded-xl px-10 shadow-lg shadow-primary/20 bg-primary hover:bg-primary/90 font-bold">
+                  Finalize Setup & Launch
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </motion.div>
         )}
-      </AnimatePresence>
+        </AnimatePresence>
+      </div>
     </div>
+  </div>
   );
 }

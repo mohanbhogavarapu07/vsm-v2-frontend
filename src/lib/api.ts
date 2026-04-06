@@ -60,6 +60,8 @@ export const api = {
   getTeam: (teamId: string) => apiRequest<any>(`/teams/${teamId}`),
   updateTeam: (teamId: string, data: { name: string }) =>
     apiRequest<any>(`/teams/${teamId}`, { method: 'PATCH', body: JSON.stringify(data) }, { team_id: teamId }),
+  deleteTeam: (teamId: string) =>
+    apiRequest<void>(`/teams/${teamId}`, { method: 'DELETE' }, { team_id: teamId }),
 
   // ── Roles (team-scoped) ────────────────────────────────────────────────────
   listRoles: (teamId: string) =>
