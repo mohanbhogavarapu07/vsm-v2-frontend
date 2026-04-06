@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/select';
 import { useProjectStore } from '@/stores/projectStore';
 import { Loader2, Mail, UserPlus } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface InviteMemberModalProps {
   open: boolean;
@@ -28,19 +29,29 @@ interface InviteMemberModalProps {
 export function InviteMemberModal({ open, onOpenChange, projectId }: InviteMemberModalProps) {
   const { roles, inviteMember } = useProjectStore();
   const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRoleId, setInviteRoleId] = useState('');
+  const [inviteRoleId, setInviteRoleId] = useState<string>("");
   const [inviting, setInviting] = useState(false);
 
   const handleInvite = async () => {
-    if (!inviteEmail.trim() || !inviteRoleId) return;
+    if (!inviteEmail.trim() || !inviteRoleId) {
+      toast.error("Please provide both email and role");
+      return;
+    }
+    
     setInviting(true);
     try {
       await inviteMember(projectId, inviteEmail.trim(), inviteRoleId);
+      toast.success("Invitation sent successfully");
       setInviteEmail('');
       setInviteRoleId('');
       onOpenChange(false);
-    } catch {
-      // error handled in store
+    } catch (e: any) {
+      // Handle 409 Conflict specifically
+      if (e.message?.toLowerCase().includes("already a member")) {
+        toast.error("This user is already a member of the team");
+      } else {
+        toast.error(e.message || "Failed to send invitation");
+      }
     } finally {
       setInviting(false);
     }
@@ -75,16 +86,23 @@ export function InviteMemberModal({ open, onOpenChange, projectId }: InviteMembe
           </div>
           <div className="space-y-2">
             <Label>Role</Label>
-            <Select value={inviteRoleId} onValueChange={setInviteRoleId}>
+            <Select 
+              value={inviteRoleId} 
+              onValueChange={setInviteRoleId}
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Select role" />
               </SelectTrigger>
               <SelectContent>
+                {roles.length === 0 && (
+                   <div className="p-2 text-xs text-muted-foreground text-center">
+                     No roles defined yet.
+                   </div>
+                )}
                 {roles.map((role) => (
                   <SelectItem key={role.id} value={role.id}>
                     <span className="flex items-center gap-2">
                       {role.name}
-                      <span className="text-[10px] text-muted-foreground">({role.access_level})</span>
                     </span>
                   </SelectItem>
                 ))}
