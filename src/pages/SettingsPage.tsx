@@ -110,7 +110,7 @@ function ProfileTab({ user, projects }: { user: any; projects: any[] }) {
     department: '',
     phone: '',
     bio: '',
-    bannerGradient: DEFAULT_BANNER,
+    bannerGradient: DEFAULT_BANNER as string,
   });
 
   const [loading, setLoading] = useState(true);
