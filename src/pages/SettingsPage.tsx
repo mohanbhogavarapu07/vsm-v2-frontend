@@ -4,6 +4,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { useThemeStore, type Theme } from '@/stores/themeStore';
 import { supabase } from '@/lib/supabase';
+import { api } from '@/lib/api';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -112,18 +113,43 @@ function ProfileTab({ user, projects }: { user: any; projects: any[] }) {
     bannerGradient: DEFAULT_BANNER,
   });
 
-  // Load profile from localStorage (persisted locally since no backend profile endpoint)
+  const [loading, setLoading] = useState(true);
+
+  // Load profile from backend
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('vsm_profile');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        setProfile((prev) => ({ ...prev, ...parsed, fullName: user?.name || parsed.fullName || '' }));
+    async function loadProfile() {
+      if (!user?.email) return;
+      try {
+        setLoading(true);
+        const data = await api.getUserProfile(user.email);
+        setProfile((prev) => ({
+          ...prev,
+          fullName: data.name || user?.name || '',
+          jobTitle: data.jobTitle || '',
+          department: data.department || '',
+          phone: data.phone || '',
+          bio: data.bio || '',
+          bannerGradient: data.bannerGradient || DEFAULT_BANNER,
+        }));
+      } catch (err) {
+        console.error('Failed to load profile from backend:', err);
+        // Fallback to local storage if API is down
+        const stored = localStorage.getItem('vsm_profile');
+        if (stored) {
+          try {
+            const parsed = JSON.parse(stored);
+            setProfile((prev) => ({ ...prev, ...parsed, fullName: user?.name || parsed.fullName || '' }));
+          } catch { /* ignore */ }
+        }
+      } finally {
+        setLoading(false);
       }
-    } catch { /* ignore */ }
-  }, [user?.name]);
+    }
+    loadProfile();
+  }, [user?.email, user?.name]);
 
   const handleSave = async () => {
+    if (!user?.email) return;
     setSaving(true);
     try {
       // Update Supabase user_metadata for the full name
@@ -132,7 +158,17 @@ function ProfileTab({ user, projects }: { user: any; projects: any[] }) {
       });
       if (error) throw error;
 
-      // Persist extended fields locally
+      // Update extended profile on the backend
+      await api.updateUserProfile(user.email, {
+        name: profile.fullName,
+        jobTitle: profile.jobTitle,
+        department: profile.department,
+        phone: profile.phone,
+        bio: profile.bio,
+        bannerGradient: profile.bannerGradient,
+      });
+
+      // Persist fallback locally
       localStorage.setItem('vsm_profile', JSON.stringify(profile));
       toast.success('Profile updated successfully');
     } catch (err: any) {
@@ -333,7 +369,7 @@ function ProfileTab({ user, projects }: { user: any; projects: any[] }) {
           {/* Google — always connected since that's the login provider */}
           <div className="flex items-center justify-between rounded-lg border border-border p-4 bg-muted/20">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white border border-border shadow-sm">
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-card border border-border shadow-sm">
                 <GoogleIcon className="h-5 w-5" />
               </div>
               <div>
@@ -714,7 +750,7 @@ export default function SettingsPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-6 scrollbar-thin">
-        <div className="max-w-4xl">
+        <div className="mx-auto max-w-5xl">
           <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
             <TabsList className="bg-muted/50 border border-border p-1">
               <TabsTrigger value="profile" className="flex items-center gap-2">
