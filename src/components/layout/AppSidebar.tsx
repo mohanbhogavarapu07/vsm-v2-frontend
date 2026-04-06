@@ -1,5 +1,4 @@
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { useAuthStore } from '@/stores/authStore';
 import { useProjectStore } from '@/stores/projectStore';
 import {
   Home,
@@ -7,32 +6,19 @@ import {
   Clock,
   Bell,
   FolderKanban,
-  Users,
-  Target,
-  Plus,
   Settings,
-  HelpCircle,
   MessageSquare,
   LayoutGrid,
   ChevronLeft,
   ChevronRight,
-  LogOut,
-  ExternalLink,
   Zap,
   ChevronDown,
-  Hammer
+  Hammer,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 export function AppSidebar() {
   const [collapsed, setCollapsed] = useState(false);
@@ -42,7 +28,6 @@ export function AppSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { projectId, teamId } = useParams<{ projectId: string, teamId: string }>();
-  const { user, signOut } = useAuthStore();
   const { teams, fetchTeams, setCurrentTeamId, currentProject, permissions } = useProjectStore();
 
   // Sync state with URL but allow manual persistence
@@ -62,6 +47,7 @@ export function AppSidebar() {
 
   const isHome = location.pathname === '/home' || location.pathname === '/';
   const isProjects = location.pathname.startsWith('/projects');
+  const isProjectsDashboard = location.pathname === '/projects' || location.pathname === '/projects/';
 
   const mainNav = [
     { path: '/home', icon: Home, label: 'Home', active: isHome },
@@ -70,22 +56,14 @@ export function AppSidebar() {
     { path: '#', icon: Bell, label: 'Notifications', active: false },
   ];
 
-  const userMeta = user?.user_metadata as Record<string, any> | undefined;
-  const userName = userMeta?.full_name || user?.email?.split('@')[0] || 'User';
-  const initials = userName
-    ?.split(' ')
-    .map((n: string) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2) || user?.email?.[0]?.toUpperCase() || '?';
-
   // Determine which project context to show
   const activeProjectId = projectId || lastProjectId;
+  const hasActiveProjectContext = activeProjectId && isProjects && !isProjectsDashboard;
 
   return (
     <aside
       className={cn(
-        'flex h-screen flex-col border-r border-slate-200 bg-white transition-all duration-300 ease-in-out z-30 overflow-x-hidden',
+        'flex h-screen flex-col border-r border-border bg-card transition-[width] duration-300 ease-in-out z-30 overflow-x-hidden',
         collapsed ? 'w-16' : 'w-64'
       )}
     >
@@ -93,17 +71,17 @@ export function AppSidebar() {
       <div className="flex h-14 items-center justify-between px-4 shrink-0">
         {!collapsed && (
           <div className="flex items-center gap-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded bg-blue-600 text-white shadow-sm">
+            <div className="flex h-6 w-6 items-center justify-center rounded bg-primary text-primary-foreground shadow-sm">
               <Zap className="h-4 w-4 fill-current" />
             </div>
-            <span className="text-sm font-bold text-slate-900 tracking-tight">VSM Global</span>
+            <span className="text-sm font-bold text-foreground tracking-tight">VSM Global</span>
           </div>
         )}
         <Button 
           variant="ghost" 
           size="icon" 
           onClick={() => setCollapsed(!collapsed)}
-          className="h-8 w-8 text-slate-500 hover:bg-slate-100"
+          className="h-8 w-8 text-muted-foreground hover:bg-accent"
         >
           {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
         </Button>
@@ -118,17 +96,17 @@ export function AppSidebar() {
             className={cn(
               'group flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
               item.active 
-                ? 'bg-blue-50 text-blue-700 shadow-sm' 
-                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                ? 'bg-primary/10 text-primary shadow-sm' 
+                : 'text-muted-foreground hover:bg-accent hover:text-foreground'
             )}
           >
-            <item.icon className={cn("h-4 w-4 shrink-0", item.active ? "text-blue-600" : "text-slate-500 group-hover:text-slate-700")} />
+            <item.icon className={cn("h-4 w-4 shrink-0", item.active ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
             {!collapsed && <span>{item.label}</span>}
           </button>
         ))}
 
         <div className="my-4 px-3">
-          <Separator className="bg-slate-100" />
+          <Separator />
         </div>
 
         {/* Projects Section */}
@@ -137,39 +115,45 @@ export function AppSidebar() {
             onClick={() => {
               if (!isProjects) {
                 navigate('/projects');
-                setIsProjectExpanded(true);
-              } else {
+                setIsProjectExpanded(false);
+              } else if (hasActiveProjectContext) {
                 setIsProjectExpanded(!isProjectExpanded);
               }
             }}
             className={cn(
               'group flex w-full items-center justify-between rounded-md px-3 py-2 text-sm font-medium transition-colors',
               isProjects 
-                ? 'bg-blue-50 text-blue-700 shadow-sm' 
-                : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                ? 'bg-primary/10 text-primary shadow-sm' 
+                : 'text-muted-foreground hover:bg-accent hover:text-foreground'
             )}
           >
-            <div className="flex items-center gap-3">
-              <FolderKanban className={cn("h-4 w-4 shrink-0", isProjects ? "text-blue-600" : "text-slate-500 group-hover:text-slate-700")} />
-              {!collapsed && <span>Projects</span>}
+            <div className="flex items-center gap-3 truncate pr-2">
+              <FolderKanban className={cn("h-4 w-4 shrink-0", isProjects ? "text-primary" : "text-muted-foreground group-hover:text-foreground")} />
+              {!collapsed && (
+                <span className="truncate">
+                  {isProjectExpanded && hasActiveProjectContext && currentProject?.name 
+                    ? currentProject.name 
+                    : 'Projects'}
+                </span>
+              )}
             </div>
-            {!collapsed && isProjectExpanded && activeProjectId && (
-              <ChevronDown className="h-3 w-3 text-blue-500 transition-transform duration-200" />
+            {!collapsed && isProjectExpanded && hasActiveProjectContext && (
+              <ChevronDown className="h-3 w-3 shrink-0 text-primary transition-transform duration-200" />
             )}
-            {!collapsed && !isProjectExpanded && activeProjectId && (
-              <ChevronRight className="h-3 w-3 text-slate-400" />
+            {!collapsed && !isProjectExpanded && hasActiveProjectContext && (
+              <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
             )}
           </button>
 
           {/* Setup / Config (Shown if section is expanded and project context exists) */}
-          {!collapsed && isProjectExpanded && activeProjectId && permissions.includes('MANAGE_TEAM') && (
+          {!collapsed && isProjectExpanded && hasActiveProjectContext && permissions.includes('MANAGE_TEAM') && (
             <button
               onClick={() => navigate(`/projects/${activeProjectId}/setup`)}
               className={cn(
                 'group ml-9 flex w-full items-center gap-2 rounded-md py-1.5 pl-3 transition-colors text-xs font-medium',
                 location.pathname.includes('/setup')
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent'
               )}
             >
               {currentProject?.setupComplete ? (
@@ -179,18 +163,18 @@ export function AppSidebar() {
                 </>
               ) : (
                 <>
-                  <Hammer className="h-3.5 w-3.5 text-blue-600" />
-                  <span className="font-semibold text-blue-700">Complete Setup</span>
+                  <Hammer className="h-3.5 w-3.5 text-primary" />
+                  <span className="font-semibold text-primary">Complete Setup</span>
                 </>
               )}
             </button>
           )}
 
           {/* Teams List (Shown if section is expanded and project context exists) */}
-          {!collapsed && isProjectExpanded && activeProjectId && (
-            <div className="ml-9 mt-2 space-y-0.5 border-l border-slate-200">
+          {!collapsed && isProjectExpanded && hasActiveProjectContext && (
+            <div className="ml-9 mt-2 space-y-0.5 border-l border-border hover:border-border/80 transition-colors">
               <div className="mb-2 pl-3">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">Available Teams</span>
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-none">Available Teams</span>
               </div>
               {teams.length > 0 ? (
                 teams.map((team) => (
@@ -200,8 +184,8 @@ export function AppSidebar() {
                     className={cn(
                       'flex w-full items-center gap-2 rounded-r-md py-1.5 pl-3 pr-2 text-xs transition-colors border-l-2',
                       teamId === team.id 
-                        ? 'bg-blue-50/80 text-blue-700 border-blue-600 font-semibold' 
-                        : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900 border-transparent hover:border-slate-300'
+                        ? 'bg-primary/10 text-primary border-primary font-semibold' 
+                        : 'text-muted-foreground hover:bg-accent hover:text-foreground border-transparent hover:border-muted-foreground/30'
                     )}
                   >
                     <span className="truncate">{team.name}</span>
@@ -209,63 +193,41 @@ export function AppSidebar() {
                 ))
               ) : (
                 <div className="py-2 pl-3">
-                  <span className="text-[10px] italic text-slate-400">No teams found</span>
+                  <span className="text-[10px] italic text-muted-foreground">No teams found</span>
                 </div>
               )}
             </div>
           )}
         </div>
 
-        {!collapsed && (
-          <button className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-900 transition-colors mt-2">
-            <LayoutGrid className="h-4 w-4" />
-            <span>View all apps</span>
+        {!collapsed && isProjectExpanded && hasActiveProjectContext && (
+          <button 
+            onClick={() => {
+              setIsProjectExpanded(false);
+              navigate('/projects');
+            }}
+            className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors mt-2"
+          >
+            <LayoutGrid className="h-4 w-4 shrink-0" />
+            <span className="truncate">View all projects</span>
           </button>
         )}
       </nav>
 
       {/* Sidebar Footer */}
-      <div className="mt-auto space-y-1 p-2 shrink-0 border-t border-slate-100 bg-white">
+      <div className="mt-auto space-y-1 p-2 shrink-0 border-t border-border bg-card">
         {!collapsed && (
           <>
-            <button className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-50 transition-colors">
+            <button className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-accent transition-colors">
               <Settings className="h-4 w-4" />
               <span>Customize sidebar</span>
             </button>
-            <button className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-xs font-medium text-slate-500 hover:bg-slate-50 transition-colors">
+            <button className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-accent transition-colors">
               <MessageSquare className="h-4 w-4" />
               <span>Give feedback</span>
             </button>
           </>
         )}
-        <div className="px-3 py-2">
-          <Separator className="bg-slate-100" />
-        </div>
-        
-        {/* Simplified User UI for Sidebar matching TopNav */}
-        {!collapsed && (
-          <div className="mb-2 flex items-center gap-3 rounded-md px-3 py-2">
-            <Avatar className="h-8 w-8 shrink-0">
-              <AvatarFallback className="bg-blue-700 text-[11px] font-bold text-white uppercase tracking-wider">
-                {initials}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex flex-1 flex-col truncate">
-              <span className="truncate text-sm font-medium text-slate-900">{userName}</span>
-              <span className="truncate text-[11px] text-slate-500">{user?.email}</span>
-            </div>
-          </div>
-        )}
-
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={signOut}
-          className={cn('w-full justify-start text-slate-500 hover:text-red-600 hover:bg-red-50 transition-colors', collapsed && 'justify-center')}
-        >
-          <LogOut className="h-4 w-4 shrink-0" />
-          {!collapsed && <span className="ml-2">Sign Out</span>}
-        </Button>
       </div>
     </aside>
   );
