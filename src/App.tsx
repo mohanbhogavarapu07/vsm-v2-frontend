@@ -16,6 +16,7 @@ import ProjectSetupPage from './pages/ProjectSetupPage';
 import TeamPage from './pages/TeamPage';
 import ResetPassword from './pages/ResetPassword';
 import AcceptInvitePage from './pages/AcceptInvitePage';
+import HomePage from './pages/HomePage';
 import NotFound from './pages/NotFound';
 import { Loader2 } from 'lucide-react';
 
@@ -56,7 +57,12 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
+      <BrowserRouter
+        future={{
+          v7_startTransition: true,
+          v7_relativeSplatPath: true,
+        }}
+      >
         <Routes>
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/accept-invite/:invitationId" element={<AcceptInvitePage />} />
@@ -65,9 +71,10 @@ const App = () => (
             element={
               <AuthGate>
                 <Routes>
-                  {/* Project Selection */}
-                  <Route path="/" element={<Navigate to="/projects" replace />} />
                   <Route element={<AppLayout />}>
+                    {/* Home & Staging area */}
+                    <Route path="/home" element={<HomePage />} />
+                    <Route path="/" element={<Navigate to="/home" replace />} />
                     <Route path="/projects" element={<ProjectsPage />} />
                     <Route path="/projects/:projectId/setup" element={<ProjectSetupPage />} />
                     <Route path="/projects/:projectId/teams/:teamId/board" element={<Index />} />
