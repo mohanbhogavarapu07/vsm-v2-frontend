@@ -176,8 +176,10 @@ export function AppSidebar() {
               <div className="mb-2 pl-3">
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-none">Available Teams</span>
               </div>
-              {teams.length > 0 ? (
-                teams.map((team) => (
+              {teams.filter(t => t.name !== 'Initial Team').length > 0 ? (
+                teams
+                  .filter((t) => t.name !== 'Initial Team')
+                  .map((team) => (
                   <button
                     key={team.id}
                     onClick={() => navigate(`/projects/${activeProjectId}/teams/${team.id}/board`)}

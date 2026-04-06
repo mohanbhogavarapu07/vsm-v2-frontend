@@ -78,12 +78,11 @@ interface ProjectState {
   setCurrentProject: (project: Project | null) => void;
   setCurrentTeamId: (teamId: string | null) => void;
   createProject: (data: { name: string }) => Promise<Project>;
-  ensureDefaultTeam: (projectId: string) => Promise<string>;
   completeProjectSetup: (projectId: string) => Promise<void>;
 
   // Teams
   fetchTeams: (projectId: string) => Promise<void>;
-  createTeam: (projectId: string, data: { name: string; copyFromTeamId?: string }) => Promise<Team>;
+  createTeam: (projectId: string, data: { name: string }) => Promise<Team>;
   updateTeamName: (teamId: string, name: string) => Promise<void>;
   deleteTeam: (projectId: string, teamId: string) => Promise<void>;
 
@@ -101,7 +100,7 @@ interface ProjectState {
 
   // Workflow stages
   fetchWorkflowStages: (projectId: string) => Promise<void>;
-  createWorkflowStage: (projectId: string, data: { name: string; stage_order: number; is_terminal?: boolean }) => Promise<WorkflowStage>;
+  createWorkflowStage: (projectId: string, data: { name: string; stage_order: number; is_terminal?: boolean; category?: string }) => Promise<WorkflowStage>;
   updateWorkflowStage: (projectId: string, stageId: string, data: Partial<WorkflowStage>) => Promise<void>;
   deleteWorkflowStage: (projectId: string, stageId: string) => Promise<void>;
   reorderWorkflowStages: (projectId: string, stages: { id: string; stage_order: number }[]) => Promise<void>;
@@ -187,11 +186,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const project = await api.createProject(data);
-      const teamId = await get().ensureDefaultTeam(project.id);
       set((state) => ({
         projects: [...state.projects, project],
         currentProject: project,
-        currentTeamId: teamId,
+        currentTeamId: null,
         loading: false,
         setupStep: 'roles',
       }));
@@ -202,20 +200,6 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
 
-  ensureDefaultTeam: async (projectId: string) => {
-    const teams = await api.listTeams(projectId);
-    const teamId = teams?.length ? String(teams[0].id) : null;
-    
-    if (teamId) {
-      await get().fetchPermissions(teamId);
-      return teamId;
-    }
-    
-    const created = await api.createTeam(projectId, { name: 'Initial Team' });
-    const newTeamId = String(created.id);
-    await get().fetchPermissions(newTeamId);
-    return newTeamId;
-  },
 
   completeProjectSetup: async (projectId: string) => {
     try {
@@ -246,14 +230,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
 
-  createTeam: async (projectId: string, data: { name: string; copyFromTeamId?: string }) => {
+  createTeam: async (projectId: string, data: { name: string }) => {
     set({ loading: true, error: null });
     try {
-      const payload: any = { name: data.name };
-      if (data.copyFromTeamId) {
-         payload.copy_from_team_id = Number(data.copyFromTeamId);
-      }
-      const created = await api.createTeam(projectId, payload);
+      const created = await api.createTeam(projectId, { name: data.name });
       const team: Team = { ...created, id: String(created.id), projectId: String(created.projectId) };
       set((state) => ({ teams: [...state.teams, team], loading: false }));
       return team;
@@ -290,13 +270,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   fetchRoles: async (projectId) => {
     try {
-      const teamId = get().currentTeamId || (await get().ensureDefaultTeam(projectId));
-      set({ currentTeamId: teamId });
-      const data = await api.listRoles(teamId);
+      const data = await api.listRoles(projectId);
       set({
         roles: data.map((r: any) => ({
           id: String(r.id),
-          team_id: String(r.teamId),
+          team_id: projectId, // UI expects some ID here, but it's now project-wide
           name: r.name,
           permission_codes: r.permission_codes || [],
           access_level: inferAccessLevel(r.permission_codes || []),
@@ -311,16 +289,14 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   createRole: async (projectId, data) => {
     set({ loading: true, error: null });
     try {
-      const teamId = get().currentTeamId || (await get().ensureDefaultTeam(projectId));
-      set({ currentTeamId: teamId });
       const payload = {
         name: data.name,
         permission_codes: permissionCodesForAccess(data.access_level),
       };
-      const created = await api.createRole(teamId, payload);
+      const created = await api.createRole(projectId, payload);
       const role: Role = {
         id: String(created.id),
-        team_id: String(created.teamId),
+        team_id: projectId,
         name: created.name,
         permission_codes: created.permission_codes || payload.permission_codes,
         access_level: data.access_level,
@@ -337,12 +313,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   updateRole: async (projectId, roleId, data) => {
     try {
-      const teamId = get().currentTeamId || (await get().ensureDefaultTeam(projectId));
-      set({ currentTeamId: teamId });
       const patch: any = {};
       if (data.name !== undefined) patch.name = data.name;
       if (data.access_level !== undefined) patch.permission_codes = permissionCodesForAccess(data.access_level);
-      await api.updateRole(teamId, roleId, patch);
+      await api.updateRole(projectId, roleId, patch);
       set((state) => ({
         roles: state.roles.map((r) => (r.id === roleId ? { ...r, ...data } : r)),
       }));
@@ -353,9 +327,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   deleteRole: async (projectId, roleId) => {
     try {
-      const teamId = get().currentTeamId || (await get().ensureDefaultTeam(projectId));
-      set({ currentTeamId: teamId });
-      await api.deleteRole(teamId, roleId);
+      await api.deleteRole(projectId, roleId);
       set((state) => ({ roles: state.roles.filter((r) => r.id !== roleId) }));
     } catch (e: any) {
       set({ error: e.message });
@@ -364,8 +336,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   fetchMembers: async (projectId) => {
     try {
-      const teamId = get().currentTeamId || (await get().ensureDefaultTeam(projectId));
-      set({ currentTeamId: teamId });
+      const teamId = get().currentTeamId;
+      if (!teamId) return;
       const data = await api.listMembers(teamId);
       set({
         members: data.map((m: any) => ({
@@ -387,8 +359,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   inviteMember: async (projectId, email, roleId) => {
     set({ loading: true, error: null });
     try {
-      const teamId = get().currentTeamId || (await get().ensureDefaultTeam(projectId));
-      set({ currentTeamId: teamId });
+      const teamId = get().currentTeamId;
+      if (!teamId) throw new Error('No team selected');
       await api.inviteMember(teamId, { email, name: email.split('@')[0] || email, role_id: roleId });
       await get().fetchMembers(projectId);
       set({ loading: false });
@@ -400,8 +372,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   updateMemberRole: async (projectId, memberId, roleId) => {
     try {
-      const teamId = get().currentTeamId || (await get().ensureDefaultTeam(projectId));
-      set({ currentTeamId: teamId });
+      const teamId = get().currentTeamId;
+      if (!teamId) throw new Error('No team selected');
       await api.updateMemberRole(teamId, memberId, { role_id: roleId });
       set((state) => ({
         members: state.members.map((m) =>
@@ -415,8 +387,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   removeMember: async (projectId, memberId) => {
     try {
-      const teamId = get().currentTeamId || (await get().ensureDefaultTeam(projectId));
-      set({ currentTeamId: teamId });
+      const teamId = get().currentTeamId;
+      if (!teamId) throw new Error('No team selected');
       await api.removeMember(teamId, memberId);
       set((state) => ({ members: state.members.filter((m) => m.id !== memberId) }));
     } catch (e: any) {
@@ -426,9 +398,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   fetchWorkflowStages: async (projectId) => {
     try {
-      const teamId = get().currentTeamId || (await get().ensureDefaultTeam(projectId));
-      set({ currentTeamId: teamId });
-      const data = await api.listStatuses(teamId);
+      const data = await api.listStatuses(projectId);
       set({
         workflowStages: data.map((s: any) => ({
           id: String(s.id),
@@ -446,11 +416,18 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   createWorkflowStage: async (projectId, data) => {
     set({ loading: true, error: null });
     try {
-      const teamId = get().currentTeamId || (await get().ensureDefaultTeam(projectId));
-      set({ currentTeamId: teamId });
-      const created = await api.createStatus(teamId, {
+      const getCategory = (name: string, isTerminal: boolean) => {
+        if (isTerminal) return 'DONE';
+        const n = name.toLowerCase();
+        if (n.includes('backlog') || n.includes('to do') || n.includes('todo') || n === 'open') return 'BACKLOG';
+        if (n.includes('review') || n.includes('pr ')) return 'REVIEW';
+        if (n.includes('test') || n.includes('qa') || n.includes('uat') || n.includes('validat')) return 'VALIDATION';
+        return 'ACTIVE';
+      };
+
+      const created = await api.createStatus(projectId, {
         name: data.name,
-        category: data.is_terminal ? 'DONE' : 'ACTIVE',
+        category: data.category || getCategory(data.name, !!data.is_terminal),
         stage_order: data.stage_order,
         is_terminal: !!data.is_terminal,
       });
@@ -474,9 +451,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   updateWorkflowStage: async (projectId, stageId, data) => {
     try {
-      const teamId = get().currentTeamId || (await get().ensureDefaultTeam(projectId));
-      set({ currentTeamId: teamId });
-      await api.updateStatus(teamId, stageId, data);
+      await api.updateStatus(projectId, stageId, data);
       set((state) => ({
         workflowStages: state.workflowStages
           .map((s) => (s.id === stageId ? { ...s, ...data } : s))
@@ -489,9 +464,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   deleteWorkflowStage: async (projectId, stageId) => {
     try {
-      const teamId = get().currentTeamId || (await get().ensureDefaultTeam(projectId));
-      set({ currentTeamId: teamId });
-      await api.deleteStatus(teamId, stageId);
+      await api.deleteStatus(projectId, stageId);
       set((state) => ({ workflowStages: state.workflowStages.filter((s) => s.id !== stageId) }));
     } catch (e: any) {
       set({ error: e.message });
@@ -500,12 +473,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   reorderWorkflowStages: async (projectId, stages) => {
     try {
-      const teamId = get().currentTeamId || (await get().ensureDefaultTeam(projectId));
-      set({ currentTeamId: teamId });
-      
       // Update stages in parallel
       await Promise.all(stages.map((update) => 
-        api.updateStatus(teamId, update.id, { stage_order: update.stage_order })
+        api.updateStatus(projectId, update.id, { stage_order: update.stage_order })
       ));
 
       set((state) => ({

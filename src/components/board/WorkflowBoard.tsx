@@ -56,7 +56,7 @@ import {
 
 export function WorkflowBoard() {
   const { projectId } = useParams<{ projectId: string }>();
-  const { currentProject, currentTeamId, ensureDefaultTeam, permissions, teams } = useProjectStore();
+  const { currentProject, currentTeamId, permissions, teams, fetchTeams } = useProjectStore();
   const {
     statuses, tasks, sprints, loading, error, selectedTaskId,
     fetchWorkflows, fetchTasks, fetchSprints, updateTaskStatus, setSelectedTask, setTeamId,
@@ -154,7 +154,16 @@ export function WorkflowBoard() {
     const boot = async () => {
       if (!projectId) return;
 
-      const teamId = currentTeamId || (await ensureDefaultTeam(projectId));
+      let teamId = currentTeamId;
+      if (!teamId && projectId) {
+         if (teams.length === 0) {
+           await fetchTeams(projectId);
+         }
+         const loadedTeams = useProjectStore.getState().teams;
+         if (loadedTeams.length > 0) {
+            teamId = loadedTeams[0].id;
+         }
+      }
       
       // Handle GitHub redirection status
       const urlParams = new URLSearchParams(window.location.search);
@@ -190,7 +199,7 @@ export function WorkflowBoard() {
       setTeamId(teamId);
       
       const promises: Promise<any>[] = [
-        fetchWorkflows(),
+        fetchWorkflows(projectId),
         fetchTasks(),
         fetchSprints(),
         fetchMembers(projectId), // Always fetch members for Task Assignment UI
@@ -209,7 +218,7 @@ export function WorkflowBoard() {
       await Promise.all(promises);
     };
     void boot();
-  }, [projectId, currentTeamId, ensureDefaultTeam, setTeamId, fetchWorkflows, fetchTasks, fetchSprints, currentTab, fetchAIDecisions, fetchMembers, fetchRoles]);
+  }, [projectId, currentTeamId, fetchTeams, setTeamId, fetchWorkflows, fetchTasks, fetchSprints, currentTab, fetchAIDecisions, fetchMembers, fetchRoles]);
 
   // Handle precise Jira-like URL synchronization
   useEffect(() => {
@@ -311,7 +320,7 @@ export function WorkflowBoard() {
       <div className="flex h-full flex-col items-center justify-center gap-3">
         <AlertCircle className="h-10 w-10 text-destructive" />
         <p className="text-sm text-muted-foreground">{error}</p>
-        <Button variant="outline" size="sm" onClick={() => { fetchWorkflows(); fetchTasks(); }}>
+        <Button variant="outline" size="sm" onClick={() => { if (projectId) fetchWorkflows(projectId); fetchTasks(); }}>
           <RefreshCw className="mr-2 h-4 w-4" />
           Retry
         </Button>

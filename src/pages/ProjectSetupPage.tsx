@@ -50,15 +50,34 @@ type StepId = typeof STEPS[number]['id'];
 const WORKFLOW_PRESETS = [
   {
     name: 'Standard Scrum',
-    stages: ['Backlog', 'To Do', 'In Progress', 'Code Review', 'Testing', 'Done'],
+    stages: [
+      { name: 'Backlog', category: 'BACKLOG', is_terminal: false },
+      { name: 'To Do', category: 'ACTIVE', is_terminal: false },
+      { name: 'In Progress', category: 'ACTIVE', is_terminal: false },
+      { name: 'Code Review', category: 'REVIEW', is_terminal: false },
+      { name: 'Testing', category: 'VALIDATION', is_terminal: false },
+      { name: 'Done', category: 'DONE', is_terminal: true },
+    ],
   },
   {
     name: 'Simple Kanban',
-    stages: ['To Do', 'In Progress', 'Done'],
+    stages: [
+      { name: 'To Do', category: 'BACKLOG', is_terminal: false },
+      { name: 'In Progress', category: 'ACTIVE', is_terminal: false },
+      { name: 'Done', category: 'DONE', is_terminal: true },
+    ],
   },
   {
     name: 'Full Pipeline',
-    stages: ['Backlog', 'Development', 'Code Review', 'QA', 'UAT', 'Deployment', 'Done'],
+    stages: [
+      { name: 'Backlog', category: 'BACKLOG', is_terminal: false },
+      { name: 'Development', category: 'ACTIVE', is_terminal: false },
+      { name: 'Code Review', category: 'REVIEW', is_terminal: false },
+      { name: 'QA', category: 'VALIDATION', is_terminal: false },
+      { name: 'UAT', category: 'VALIDATION', is_terminal: false },
+      { name: 'Deployment', category: 'ACTIVE', is_terminal: false },
+      { name: 'Done', category: 'DONE', is_terminal: true },
+    ],
   },
 ];
 
@@ -106,8 +125,6 @@ export default function ProjectSetupPage() {
   const [editTeamName, setEditTeamName] = useState('');
   const [deletingTeamId, setDeletingTeamId] = useState<string | null>(null);
 
-  const visibleTeams = teams.filter(t => t.name !== 'Initial Team');
-
   const { deleteTeam } = useProjectStore(); // Destructure deleteTeam from store
 
   useEffect(() => {
@@ -129,7 +146,7 @@ export default function ProjectSetupPage() {
     if (!projectId || !currentProject) return;
     
     // Prevent accidental deletion of the last team
-    if (visibleTeams.length <= 1) {
+    if (teams.length <= 1) {
       toast.error('Cannot delete the last team in a project');
       return;
     }
@@ -184,7 +201,7 @@ export default function ProjectSetupPage() {
     }
   };
 
-  const handleApplyPreset = async (stages: string[]) => {
+  const handleApplyPreset = async (stages: any[]) => {
     if (!projectId) return;
     setApplyingPreset(true);
     try {
@@ -193,11 +210,12 @@ export default function ProjectSetupPage() {
       
       // Create new stages in parallel
       await Promise.all(
-        stages.map((stageName, i) =>
+        stages.map((stage, i) =>
           createWorkflowStage(projectId, {
-            name: stageName,
+            name: stage.name,
+            category: stage.category,
             stage_order: i,
-            is_terminal: i === stages.length - 1,
+            is_terminal: stage.is_terminal,
           })
         )
       );
@@ -225,15 +243,10 @@ export default function ProjectSetupPage() {
   };
 
   const handleCreateTeam = async () => {
-    if (!newTeamName.trim() || !projectId || !currentTeamId) return;
+    if (!newTeamName.trim() || !projectId) return;
     setCreatingTeam(true);
     try {
-      if (teams.length === 1 && teams[0].name === 'Initial Team') {
-        await updateTeamName(teams[0].id, newTeamName.trim());
-        await fetchTeams(projectId);
-      } else {
-        await createTeam(projectId, { name: newTeamName.trim(), copyFromTeamId: currentTeamId });
-      }
+      await createTeam(projectId, { name: newTeamName.trim() });
       setNewTeamName('');
     } catch (err) {
       console.error('Failed to create team:', err);
@@ -258,9 +271,8 @@ export default function ProjectSetupPage() {
     try {
       await useProjectStore.getState().completeProjectSetup(projectId);
       // route to the board of the first team found
-      const t = teams.length > 0 ? teams[0].id : currentTeamId;
-      if (t) {
-        navigate(`/projects/${projectId}/teams/${t}/board`);
+      if (teams.length > 0) {
+        navigate(`/projects/${projectId}/teams/${teams[0].id}/board`);
       } else {
         navigate(`/projects/${projectId}`);
       }
@@ -347,13 +359,13 @@ export default function ProjectSetupPage() {
                  size="sm" 
                  className="h-9 px-4 rounded-lg border-primary/20 hover:bg-primary/5 text-primary"
                  onClick={() => {
-                   const firstTeam = teams[0]?.id || currentTeamId;
-                   if (firstTeam) {
-                     navigate(`/projects/${projectId}/teams/${firstTeam}/board`);
-                   } else {
-                     toast.error('No teams found in this project');
-                   }
-                 }}
+                  const firstTeam = teams[0]?.id;
+                  if (firstTeam) {
+                    navigate(`/projects/${projectId}/teams/${firstTeam}/board`);
+                  } else {
+                    toast.error('No teams found in this project');
+                  }
+                }}
                >
                  View Board
                </Button>
@@ -865,12 +877,12 @@ export default function ProjectSetupPage() {
                  <h2 className="text-lg font-bold flex items-center gap-2 mb-4">
                   <Users className="h-5 w-5 text-primary" />
                   Team Organizations
-                  <Badge variant="outline" className="ml-2 font-normal text-[10px] px-1 h-4">{visibleTeams.length}</Badge>
+                  <Badge variant="outline" className="ml-2 font-normal text-[10px] px-1 h-4">{teams.length}</Badge>
                 </h2>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <AnimatePresence initial={false}>
-                    {visibleTeams.map((team) => (
+                    {teams.map((team) => (
                       <motion.div
                         key={team.id}
                         layout

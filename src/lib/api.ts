@@ -55,7 +55,7 @@ export const api = {
 
   // ── Teams ──────────────────────────────────────────────────────────────────
   listTeams: (projectId: string) => apiRequest<any[]>(`/projects/${projectId}/teams`),
-  createTeam: (projectId: string, data: { name: string; copy_from_team_id?: number }) =>
+  createTeam: (projectId: string, data: { name: string }) =>
     apiRequest<any>(`/projects/${projectId}/teams`, { method: 'POST', body: JSON.stringify(data) }),
   getTeam: (teamId: string) => apiRequest<any>(`/teams/${teamId}`),
   updateTeam: (teamId: string, data: { name: string }) =>
@@ -63,24 +63,24 @@ export const api = {
   deleteTeam: (teamId: string) =>
     apiRequest<void>(`/teams/${teamId}`, { method: 'DELETE' }, { team_id: teamId }),
 
-  // ── Roles (team-scoped) ────────────────────────────────────────────────────
-  listRoles: (teamId: string) =>
-    apiRequest<any[]>(`/teams/${teamId}/roles`, {}, { team_id: teamId }),
-  createRole: (teamId: string, data: { name: string; permission_codes: string[] }) =>
-    apiRequest<any>(`/teams/${teamId}/roles`, { method: 'POST', body: JSON.stringify(data) }, { team_id: teamId }),
-  updateRole: (teamId: string, roleId: string, data: Partial<{ name: string; permission_codes: string[] }>) =>
-    apiRequest<any>(`/teams/${teamId}/roles/${roleId}`, { method: 'PATCH', body: JSON.stringify(data) }, { team_id: teamId }),
-  deleteRole: (teamId: string, roleId: string) =>
-    apiRequest<void>(`/teams/${teamId}/roles/${roleId}`, { method: 'DELETE' }, { team_id: teamId }),
+  // ── Roles (project-scoped) ──────────────────────────────────────────────────
+  listRoles: (projectId: string) =>
+    apiRequest<any[]>(`/projects/${projectId}/roles`),
+  createRole: (projectId: string, data: { name: string; permission_codes: string[] }) =>
+    apiRequest<any>(`/projects/${projectId}/roles`, { method: 'POST', body: JSON.stringify(data) }),
+  updateRole: (projectId: string, roleId: string, data: Partial<{ name: string; permission_codes: string[] }>) =>
+    apiRequest<any>(`/projects/${projectId}/roles/${roleId}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteRole: (projectId: string, roleId: string) =>
+    apiRequest<void>(`/projects/${projectId}/roles/${roleId}`, { method: 'DELETE' }),
 
-  // ── Workflow statuses (team-scoped) ────────────────────────────────────────
-  listStatuses: (teamId: string) => apiRequest<any[]>(`/teams/${teamId}/workflow/statuses`, {}, { team_id: teamId }),
-  createStatus: (teamId: string, data: { name: string; category: string; stage_order: number; is_terminal?: boolean }) =>
-    apiRequest<any>(`/teams/${teamId}/workflow/statuses`, { method: 'POST', body: JSON.stringify(data) }, { team_id: teamId }),
-  updateStatus: (teamId: string, statusId: string, data: Partial<{ name: string; category: string; stage_order: number; is_terminal: boolean }>) =>
-    apiRequest<any>(`/teams/${teamId}/workflow/statuses/${statusId}`, { method: 'PATCH', body: JSON.stringify(data) }, { team_id: teamId }),
-  deleteStatus: (teamId: string, statusId: string) =>
-    apiRequest<void>(`/teams/${teamId}/workflow/statuses/${statusId}`, { method: 'DELETE' }, { team_id: teamId }),
+  // ── Workflow statuses (project-scoped) ──────────────────────────────────────
+  listStatuses: (projectId: string) => apiRequest<any[]>(`/projects/${projectId}/workflow/statuses`),
+  createStatus: (projectId: string, data: { name: string; category: string; stage_order: number; is_terminal?: boolean }) =>
+    apiRequest<any>(`/projects/${projectId}/workflow/statuses`, { method: 'POST', body: JSON.stringify(data) }),
+  updateStatus: (projectId: string, statusId: string, data: Partial<{ name: string; category: string; stage_order: number; is_terminal: boolean }>) =>
+    apiRequest<any>(`/projects/${projectId}/workflow/statuses/${statusId}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  deleteStatus: (projectId: string, statusId: string) =>
+    apiRequest<void>(`/projects/${projectId}/workflow/statuses/${statusId}`, { method: 'DELETE' }),
 
   // ── Members / invitations (team-scoped) ────────────────────────────────────
   listMembers: (teamId: string) => apiRequest<any[]>(`/teams/${teamId}/members`, {}, { team_id: teamId }),
@@ -90,6 +90,13 @@ export const api = {
     apiRequest<any>(`/teams/${teamId}/members/${memberId}/role`, { method: 'PATCH', body: JSON.stringify(data) }, { team_id: teamId }),
   removeMember: (teamId: string, memberId: string) =>
     apiRequest<void>(`/teams/${teamId}/members/${memberId}`, { method: 'DELETE' }, { team_id: teamId }),
+
+  // ── Workflow transitions (project-scoped) ─────────────────────────────────
+  listTransitions: (projectId: string) => apiRequest<any[]>(`/projects/${projectId}/workflow/transitions`),
+  createTransition: (project_id: string, data: { from_status_id: number; to_status_id: number; requires_manual_approval?: boolean }) =>
+    apiRequest<any>(`/projects/${project_id}/workflow/transitions`, { method: 'POST', body: JSON.stringify(data) }),
+  deleteTransition: (projectId: string, transitionId: string) =>
+    apiRequest<any>(`/projects/${projectId}/workflow/transitions/${transitionId}`, { method: 'DELETE' }),
 
   // ── Tasks (team-scoped via query) ──────────────────────────────────────────
   listTasks: (teamId: string, limit = 50, offset = 0) =>

@@ -70,7 +70,7 @@ interface WorkflowState {
   teamId: string | null;
 
   // Core fetches
-  fetchWorkflows: () => Promise<void>;
+  fetchWorkflows: (projectId: string) => Promise<void>;
   fetchTasks: () => Promise<void>;
   fetchSprints: () => Promise<void>;
   fetchAIDecisions: () => Promise<void>;
@@ -119,15 +119,14 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   // FETCHES
   // ─────────────────────────────────────────────────────────────────────────
 
-  fetchWorkflows: async () => {
-    const teamId = get().teamId;
-    if (!teamId) {
-      set({ error: 'No team selected', statuses: [] });
+  fetchWorkflows: async (projectId: string) => {
+    if (!projectId) {
+      set({ error: 'No project selected', statuses: [] });
       return;
     }
     set({ loading: true, error: null });
     try {
-      const data = await api.listStatuses(teamId);
+      const data = await api.listStatuses(projectId);
       const statuses: WorkflowStatus[] = (data || []).map((s: any) => ({
         id: String(s.id),
         name: s.name,
