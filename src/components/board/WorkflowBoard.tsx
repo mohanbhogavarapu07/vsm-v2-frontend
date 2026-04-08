@@ -109,14 +109,14 @@ export function WorkflowBoard() {
   // Tasks in the active sprint (for kanban board view)
   const activeSprintTasks = useMemo(() => {
     const sprintTasks = activeSprint
-      ? tasks.filter((t) => t.sprint_id === activeSprint.id)
+      ? tasks.filter((t) => String(t.sprint_id) === String(activeSprint.id))
       : tasks;
     if (!boardSearch.trim()) return sprintTasks;
     return sprintTasks.filter((t) => t.title.toLowerCase().includes(boardSearch.toLowerCase()));
   }, [activeSprint, tasks, boardSearch]);
 
   const incompleteTasks = (activeSprint
-    ? tasks.filter((t) => t.sprint_id === activeSprint.id)
+    ? tasks.filter((t) => String(t.sprint_id) === String(activeSprint.id))
     : tasks
   ).filter((t) => t.status_category !== 'DONE').length;
 
@@ -150,6 +150,7 @@ export function WorkflowBoard() {
     }
   };
 
+  // ── Initial boot: fetch core data once when project/team changes ──────
   useEffect(() => {
     const boot = async () => {
       if (!projectId) return;
@@ -169,16 +170,14 @@ export function WorkflowBoard() {
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get('status') === 'github_success') {
         toast.success('GitHub App installed! Syncing repositories...');
-        setCurrentTab('code'); // Auto-switch to Code tab to show available repos
+        setCurrentTab('code');
         
         const runPolling = async () => {
           setIsGitHubCallbackProcessing(true);
           try {
-            for (let i = 0; i < 5; i++) { // Poll up to 5 times (total ~12.5s)
+            for (let i = 0; i < 5; i++) {
               const { linked, available } = await loadGitHubData(teamId);
-              if (linked.length > 0 || available.length > 0) {
-                break; // Exit exactly when data populates
-              }
+              if (linked.length > 0 || available.length > 0) break;
               await new Promise(r => setTimeout(r, 2500));
             }
           } finally {
@@ -187,7 +186,6 @@ export function WorkflowBoard() {
         };
         runPolling();
         
-        // Remove the query param from URL without refreshing
         const newUrl = window.location.pathname + (teamId ? `?team_id=${teamId}` : '');
         window.history.replaceState({}, document.title, newUrl);
       } else if (urlParams.get('status') === 'github_error') {
@@ -198,27 +196,31 @@ export function WorkflowBoard() {
 
       setTeamId(teamId);
       
-      const promises: Promise<any>[] = [
+      // Fetch core data that all tabs need
+      await Promise.all([
         fetchWorkflows(projectId),
         fetchTasks(),
         fetchSprints(),
-        fetchMembers(projectId), // Always fetch members for Task Assignment UI
-      ];
-
-      if (currentTab === 'activity') promises.push(fetchEvents(teamId));
-      if (currentTab === 'decisions') promises.push(fetchAIDecisions());
-      if (currentTab === 'summary' || currentTab === 'team') {
-        promises.push(fetchMembers(projectId));
-      }
-      if (currentTab === 'team') {
-        promises.push(fetchRoles(projectId));
-      }
-      if (currentTab === 'code') promises.push(loadGitHubData(teamId));
-
-      await Promise.all(promises);
+        fetchMembers(projectId),
+      ]);
     };
     void boot();
-  }, [projectId, currentTeamId, fetchTeams, setTeamId, fetchWorkflows, fetchTasks, fetchSprints, currentTab, fetchAIDecisions, fetchMembers, fetchRoles]);
+  }, [projectId, currentTeamId]);
+
+  // ── Tab-specific data fetching (only when tab changes) ──────────────
+  useEffect(() => {
+    if (!projectId || !currentTeamId) return;
+    
+    if (currentTab === 'activity') {
+      fetchEvents(currentTeamId);
+    } else if (currentTab === 'decisions') {
+      fetchAIDecisions();
+    } else if (currentTab === 'team') {
+      fetchRoles(projectId);
+    } else if (currentTab === 'code') {
+      loadGitHubData(currentTeamId);
+    }
+  }, [currentTab, projectId, currentTeamId]);
 
   // Handle precise Jira-like URL synchronization
   useEffect(() => {
@@ -305,7 +307,7 @@ export function WorkflowBoard() {
     }
   };
 
-  const sortedStatuses = [...statuses].sort((a, b) => a.stage_order - b.stage_order);
+  const sortedStatuses = [...statuses].sort((a, b) => a.positionOrder - b.positionOrder);
 
   if (loading && statuses.length === 0) {
     return (

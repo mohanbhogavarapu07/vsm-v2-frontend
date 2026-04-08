@@ -173,7 +173,7 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
               <div>
                 <h3 className="mb-1 text-xs font-semibold uppercase text-muted-foreground">Assignee</h3>
                 <Select
-                  value={task.assignee_id || 'unassigned'}
+                  value={String(task.assignee_id || 'unassigned')}
                   onValueChange={(val) => updateTaskAssignee(task.id, val === 'unassigned' ? null : val)}
                   disabled={!permissions.includes('UPDATE_TASK')}
                 >
@@ -215,7 +215,7 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
               <div>
                 <h3 className="mb-1 text-xs font-semibold uppercase text-muted-foreground">Created</h3>
                 <p className="text-sm text-foreground">
-                  {task.created_at ? new Date(task.created_at).toLocaleDateString() : '—'}
+                  {task.createdAt ? new Date(task.createdAt).toLocaleDateString() : '—'}
                 </p>
               </div>
             </div>

@@ -59,8 +59,14 @@ export interface Task {
   priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
   order: number;
   assignee_id?: number | null;
+  assignee_name?: string;
   createdAt: string;
   updatedAt: string;
+  // AI/Dev signal fields (may come from backend)
+  pr_status?: string;
+  ci_status?: string;
+  ai_signals?: string[];
+  ai_confidence?: number;
 }
 
 export interface Sprint {
@@ -94,6 +100,7 @@ interface WorkflowState {
   selectedTaskId: string | null;
   currentTeamId: string | null;
   aiDecisions: AIDecision[];
+  isTaskEditMode: boolean;
   
   selectedFromStageId: number | null;
   selectedToStageId: number | null;
@@ -114,7 +121,10 @@ interface WorkflowState {
   fetchSprints: () => Promise<void>;
   fetchAIDecisions: () => Promise<void>;
   setSelectedTask: (taskId: string | null) => void;
+  setIsTaskEditMode: (mode: boolean) => void;
   updateTaskStatus: (taskId: string, newStatusId: string) => Promise<void>;
+  updateTaskPriority: (taskId: string, priority: Task['priority']) => Promise<void>;
+  updateTaskAssignee: (taskId: string, assigneeId: string | null) => Promise<void>;
 
   // Sprint Management
   createSprint: (name: string, goal?: string, startDate?: string, endDate?: string) => Promise<any>;
@@ -144,7 +154,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   selectedTaskId: null,
   currentTeamId: null,
   aiDecisions: [],
-  
+  isTaskEditMode: false,
   selectedFromStageId: null,
   selectedToStageId: null,
   
@@ -172,10 +182,16 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
   // Kanban Implementations
   setTeamId: (teamId) => {
+    const current = get().currentTeamId;
+    if (current === teamId) return; // Prevent unnecessary state reset
     set({ currentTeamId: teamId, tasks: [], sprints: [], aiDecisions: [] });
   },
 
   fetchWorkflows: async (projectId) => {
+    if (get().statuses.length > 0 && !get().error) {
+      // Already have data, skip redundant fetch
+      return;
+    }
     set({ loading: true, error: null });
     try {
       const data = await api.listStatuses(projectId);
@@ -226,6 +242,35 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     } catch (e: any) {
       console.error('Failed to fetch AI decisions', e);
       set({ aiDecisions: [] });
+    }
+  },
+
+  setIsTaskEditMode: (mode) => set({ isTaskEditMode: mode }),
+
+  updateTaskPriority: async (taskId, priority) => {
+    const teamId = get().currentTeamId;
+    if (!teamId) return;
+    try {
+      await api.updateTask(taskId, teamId, { priority });
+      set((state) => ({
+        tasks: state.tasks.map((t) => (String(t.id) === String(taskId) ? { ...t, priority } : t)),
+      }));
+    } catch (e: any) {
+      toast.error('Failed to update priority', { description: e.message });
+    }
+  },
+
+  updateTaskAssignee: async (taskId, assigneeId) => {
+    const teamId = get().currentTeamId;
+    if (!teamId) return;
+    try {
+      const numId = assigneeId ? Number(assigneeId) : null;
+      await api.updateTask(taskId, teamId, { assignee_id: numId });
+      set((state) => ({
+        tasks: state.tasks.map((t) => (String(t.id) === String(taskId) ? { ...t, assignee_id: numId } : t)),
+      }));
+    } catch (e: any) {
+      toast.error('Failed to update assignee', { description: e.message });
     }
   },
 
