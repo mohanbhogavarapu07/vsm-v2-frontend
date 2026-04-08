@@ -36,6 +36,8 @@ export function AppSidebar() {
       setLastProjectId(projectId);
       setIsProjectExpanded(true);
       fetchTeams(projectId);
+      // Fetch project-level permissions to ensure 'Config' button is visible
+      useProjectStore.getState().fetchPermissions(undefined, projectId);
     }
   }, [projectId, fetchTeams]);
 

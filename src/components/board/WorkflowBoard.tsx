@@ -542,7 +542,7 @@ export function WorkflowBoard() {
             )}
           </div>
         ) : currentTab === 'backlog' ? (
-          <div className="h-full overflow-y-auto">
+          <div className="h-full">
             <BacklogView />
           </div>
         ) : currentTab === 'summary' ? (
@@ -577,7 +577,7 @@ export function WorkflowBoard() {
           </div>
         ) : currentTab === 'decisions' ? (
           <div className="h-full overflow-y-auto p-6 scrollbar-thin max-w-4xl mx-auto">
-            {aiDecisions.length === 0 ? (
+            {(!aiDecisions || aiDecisions.length === 0) ? (
               <div className="flex flex-col items-center justify-center py-20">
                 <Bot className="mb-3 h-10 w-10 text-muted-foreground/30" />
                 <p className="text-sm text-muted-foreground">No AI decisions yet.</p>

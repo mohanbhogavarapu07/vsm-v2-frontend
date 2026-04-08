@@ -1,168 +1,205 @@
 import { create } from 'zustand';
 import { api } from '@/lib/api';
+import { toast } from 'sonner';
 
-export interface WorkflowStatus {
-  id: string;
+export interface WorkflowStage {
+  id: number;
+  projectId: number;
   name: string;
-  category: 'BACKLOG' | 'ACTIVE' | 'REVIEW' | 'VALIDATION' | 'DONE' | 'BLOCKED';
-  stage_order: number;
-  is_terminal: boolean;
+  systemCategory: 'ACTIVE' | 'REVIEW' | 'VALIDATION' | 'DONE' | 'BLOCKED' | 'BACKLOG';
+  intentTag?: string;
+  positionOrder: number;
+  scopeType: 'PROJECT' | 'TEAM';
+  isBlocking: boolean;
+  requiresApprovalToExit: boolean;
+  slaDurationMinutes?: number;
+}
+
+export interface WorkflowTransition {
+  id: number;
+  projectId: number;
+  fromStageId: number;
+  toStageId: number;
+  directionType: 'FORWARD' | 'BACKWARD' | 'PARALLEL';
+  triggerType: 'GITHUB_EVENT' | 'MANUAL' | 'TIMER' | 'CONDITION_MET';
+  githubEventType?: string;
+  requiredRole?: string;
+  conditions: any[];
+  postActions: any[];
+  isActive: boolean;
+  fromStageName?: string;
+  toStageName?: string;
+}
+
+export interface AIDecision {
+  id: number;
+  taskId: number;
+  taskTitle?: string;
+  fromStageId?: number;
+  toStageId?: number;
+  transitionId?: number;
+  confidenceScore: number;
+  reasoning: string;
+  correlationId: string;
+  status: 'APPLIED' | 'BLOCKED' | 'NO_TRANSITION' | 'FUZZY_LINK' | 'PENDING_CONFIRMATION' | 'PENDING_APPROVAL';
+  triggeredByEvent?: string;
+  createdAt: string;
 }
 
 export interface Task {
   id: string;
-  title: string;
-  description?: string;
-  sprint_id?: string;
-  status_id?: string;
+  teamId: number;
+  sprint_id: number | null;
+  status_id: number | null;
+  currentStageId: number | null;
   status_name?: string;
   status_category?: string;
-  assignee_id?: string;
-  assignee_name?: string;
-  priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-  order?: number;
-  pr_status?: string;
-  ci_status?: string;
-  ai_signals?: string[];
-  ai_confidence?: number;
-  created_at?: string;
-  updated_at?: string;
-}
-
-export interface SprintTaskCounts {
-  total: number;
-  todo: number;
-  in_progress: number;
-  done: number;
+  title: string;
+  description?: string;
+  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  order: number;
+  assignee_id?: number | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Sprint {
   id: string;
+  teamId: number;
   name: string;
   goal?: string;
   status: 'PLANNED' | 'ACTIVE' | 'COMPLETED';
   startDate?: string;
   endDate?: string;
-  task_counts: SprintTaskCounts;
-}
-
-export interface AIDecision {
-  id: string;
-  task_id: string;
-  task_title?: string;
-  decision: string;
-  confidence: number;
-  reason: string;
-  signals_used: string[];
-  status: 'EXECUTED' | 'PENDING_APPROVAL' | 'REJECTED';
-  created_at: string;
+  task_counts: {
+    total: number;
+    todo: number;
+    in_progress: number;
+    done: number;
+  };
 }
 
 interface WorkflowState {
-  statuses: WorkflowStatus[];
+  // New Graph-based Workflow Engine
+  stages: WorkflowStage[];
+  transitions: WorkflowTransition[];
+  readiness: 'DRAFT' | 'INCOMPLETE' | 'ACTIVE';
+  
+  // Legacy/Kanban Board State
+  statuses: WorkflowStage[]; // Alias for stages to support older components
   tasks: Task[];
   sprints: Sprint[];
-  aiDecisions: AIDecision[];
   loading: boolean;
   error: string | null;
   selectedTaskId: string | null;
-  isTaskEditMode: boolean;
-  teamId: string | null;
+  currentTeamId: string | null;
+  aiDecisions: AIDecision[];
+  
+  selectedFromStageId: number | null;
+  selectedToStageId: number | null;
+  
+  // New Actions
+  setWorkflowGraph: (graph: { stages: WorkflowStage[], transitions: WorkflowTransition[], readiness: string }) => void;
+  addStage: (stage: WorkflowStage) => void;
+  addTransition: (transition: WorkflowTransition) => void;
+  setSelectedFromStage: (id: number | null) => void;
+  setSelectedToStage: (id: number | null) => void;
+  setAIDecisions: (decisions: AIDecision[]) => void;
+  appendAIDecision: (decision: AIDecision) => void;
 
-  // Core fetches
+  // Kanban/Board Actions
+  setTeamId: (teamId: string | null) => void;
   fetchWorkflows: (projectId: string) => Promise<void>;
-  fetchTasks: () => Promise<void>;
+  fetchTasks: (limit?: number, offset?: number) => Promise<void>;
   fetchSprints: () => Promise<void>;
   fetchAIDecisions: () => Promise<void>;
-
-  // Task actions
-  setSelectedTask: (id: string | null) => void;
-  setIsTaskEditMode: (val: boolean) => void;
+  setSelectedTask: (taskId: string | null) => void;
   updateTaskStatus: (taskId: string, newStatusId: string) => Promise<void>;
-  updateTaskSprint: (taskId: string, sprintId: string | null) => Promise<void>;
-  createTask: (title: string, statusId?: string, sprintId?: string) => Promise<void>;
-  updateTaskAssignee: (taskId: string, assigneeId: string | null) => Promise<void>;
-  updateTaskPriority: (taskId: string, priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL') => Promise<void>;
-  updateTaskOrder: (taskId: string, sprintId: string | null, newOrder: number) => Promise<void>;
-  updateTaskDetails: (taskId: string, data: { title: string; description: string }) => Promise<void>;
-  deleteTask: (taskId: string) => Promise<void>;
 
-  // Sprint CRUD
-  createSprint: (name: string, goal?: string, startDate?: string, endDate?: string) => Promise<Sprint | null>;
-  updateSprint: (sprintId: string, data: { name?: string; goal?: string; startDate?: string; endDate?: string }) => Promise<void>;
+  // Sprint Management
+  createSprint: (name: string, goal?: string, startDate?: string, endDate?: string) => Promise<any>;
+  updateSprint: (sprintId: string, data: Partial<{ name: string; goal: string; startDate: string; endDate: string }>) => Promise<void>;
   deleteSprint: (sprintId: string) => Promise<void>;
-
-  // Sprint lifecycle (Jira-style)
   startSprint: (sprintId: string, data: { goal?: string; startDate?: string; endDate?: string }) => Promise<void>;
-  completeSprint: (sprintId: string, rolloverSprintId?: string | null) => Promise<void>;
+  completeSprint: (sprintId: string, rolloverSprintId?: number | string | null) => Promise<void>;
 
-  // Team
-  setTeamId: (teamId: string | null) => void;
+  // Task Management
+  createTask: (title: string, statusId?: string | number, sprintId?: string | number) => Promise<void>;
+  deleteTask: (taskId: string) => Promise<void>;
+  updateTaskOrder: (taskId: string, sprintId: string | number | null, order: number) => Promise<void>;
+  updateTaskSprint: (taskId: string, sprintId: string | number | null) => Promise<void>;
+  updateTaskDetails: (taskId: string, data: Partial<{ title: string; description: string; priority: string; assignee_id: number | null }>) => Promise<void>;
 }
 
 export const useWorkflowStore = create<WorkflowState>((set, get) => ({
+  stages: [],
+  transitions: [],
+  readiness: 'DRAFT',
+  
   statuses: [],
   tasks: [],
   sprints: [],
-  aiDecisions: [],
   loading: false,
   error: null,
   selectedTaskId: null,
-  isTaskEditMode: false,
-  teamId: null,
+  currentTeamId: null,
+  aiDecisions: [],
+  
+  selectedFromStageId: null,
+  selectedToStageId: null,
+  
+  setWorkflowGraph: (graph) => set({ 
+    stages: graph.stages, 
+    transitions: graph.transitions, 
+    readiness: graph.readiness as any,
+    statuses: graph.stages // Update statuses alias too
+  }),
+  
+  addStage: (stage) => set((state) => ({ 
+    stages: [...state.stages, stage],
+    statuses: [...state.stages, stage]
+  })),
+  
+  addTransition: (transition) => set((state) => ({ transitions: [...state.transitions, transition] })),
+  
+  setSelectedFromStage: (id) => set({ selectedFromStageId: id }),
+  
+  setSelectedToStage: (id) => set({ selectedToStageId: id }),
+  
+  setAIDecisions: (decisions) => set({ aiDecisions: decisions }),
+  
+  appendAIDecision: (decision) => set((state) => ({ aiDecisions: [decision, ...state.aiDecisions] })),
 
-  setTeamId: (id) => set({ teamId: id }),
-  setSelectedTask: (id) => set({ selectedTaskId: id }),
-  setIsTaskEditMode: (val) => set({ isTaskEditMode: val }),
+  // Kanban Implementations
+  setTeamId: (teamId) => {
+    set({ currentTeamId: teamId, tasks: [], sprints: [], aiDecisions: [] });
+  },
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // FETCHES
-  // ─────────────────────────────────────────────────────────────────────────
-
-  fetchWorkflows: async (projectId: string) => {
-    if (!projectId) {
-      set({ error: 'No project selected', statuses: [] });
-      return;
-    }
+  fetchWorkflows: async (projectId) => {
     set({ loading: true, error: null });
     try {
       const data = await api.listStatuses(projectId);
-      const statuses: WorkflowStatus[] = (data || []).map((s: any) => ({
-        id: String(s.id),
+      const stages = data.map((s: any) => ({
+        id: s.id,
+        projectId: s.projectId,
         name: s.name,
-        category: s.category,
-        stage_order: s.stageOrder,
-        is_terminal: s.isTerminal,
-      }));
-      set({ statuses, loading: false });
+        systemCategory: s.category,
+        intentTag: s.intentTag,
+        positionOrder: s.stageOrder,
+        isBlocking: s.isTerminal,
+      })) as any[];
+      set({ stages, statuses: stages, loading: false });
     } catch (e: any) {
       set({ error: e.message, loading: false });
     }
   },
 
-  fetchTasks: async () => {
-    const teamId = get().teamId;
-    if (!teamId) {
-      set({ error: 'No team selected', tasks: [] });
-      return;
-    }
-    set({ loading: true, error: null });
+  fetchTasks: async (limit, offset) => {
+    const teamId = get().currentTeamId;
+    if (!teamId) return;
+    set({ loading: true });
     try {
-      const data = await api.listTasks(teamId);
-      const tasks: Task[] = (data || []).map((t: any) => ({
-        id: String(t.id),
-        title: t.title,
-        description: t.description ?? undefined,
-        sprint_id: t.sprintId ? String(t.sprintId) : undefined,
-        status_id: t.currentStatusId ? String(t.currentStatusId) : undefined,
-        status_name: t.currentStatus?.name,
-        status_category: t.currentStatus?.category,
-        assignee_id: t.assigneeId ? String(t.assigneeId) : undefined,
-        priority: t.priority as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' | undefined,
-        order: t.order ?? 1000,
-        created_at: t.createdAt,
-        updated_at: t.updatedAt,
-      }));
+      const tasks = await api.listTasks(teamId, limit, offset);
       set({ tasks, loading: false });
     } catch (e: any) {
       set({ error: e.message, loading: false });
@@ -170,302 +207,201 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   },
 
   fetchSprints: async () => {
-    const teamId = get().teamId;
+    const teamId = get().currentTeamId;
     if (!teamId) return;
     try {
-      const data = await api.listSprints(teamId);
-      const sprints: Sprint[] = (data || []).map((s: any) => ({
-        id: String(s.id),
-        name: s.name,
-        goal: s.goal,
-        status: s.status,
-        startDate: s.startDate,
-        endDate: s.endDate,
-        task_counts: s.task_counts ?? { total: 0, todo: 0, in_progress: 0, done: 0 },
-      }));
+      const sprints = await api.listSprints(teamId);
       set({ sprints });
     } catch (e: any) {
-      set({ error: e.message });
+      console.error('Failed to fetch sprints', e);
     }
   },
 
   fetchAIDecisions: async () => {
+    const teamId = get().currentTeamId;
+    if (!teamId) return;
     try {
-      const teamId = get().teamId;
-      if (!teamId) {
-        set({ aiDecisions: [] });
-        return;
-      }
-      const tasks = get().tasks;
-      if (!tasks.length) {
-        set({ aiDecisions: [] });
-        return;
-      }
-      const rows = await Promise.all(
-        tasks.map(async (t) => {
-          try {
-            const decisions = await api.getTaskDecisions(t.id, teamId);
-            return (decisions || []).map((d: any) => ({
-              id: String(d.id),
-              task_id: String(d.taskId),
-              task_title: t.title,
-              decision: d.actionTaken,
-              confidence: d.confidenceScore,
-              reason: d.reason,
-              signals_used: Object.keys(d.inputSignals || {}),
-              status: 'EXECUTED' as const,
-              created_at: d.createdAt,
-            }));
-          } catch {
-            return [];
-          }
-        })
-      );
-      set({ aiDecisions: rows.flat() });
+      const data = await api.getEventLog(teamId);
+      set({ aiDecisions: data as any });
     } catch (e: any) {
-      set({ error: e.message });
+      console.error('Failed to fetch AI decisions', e);
+      set({ aiDecisions: [] });
     }
   },
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // TASK ACTIONS
-  // ─────────────────────────────────────────────────────────────────────────
+  setSelectedTask: (taskId) => set({ selectedTaskId: taskId }),
 
   updateTaskStatus: async (taskId, newStatusId) => {
+    const teamId = get().currentTeamId;
+    if (!teamId) return;
     try {
-      const teamId = get().teamId;
-      if (!teamId) throw new Error('No team selected');
       await api.manualTransition(taskId, teamId, { new_status_id: Number(newStatusId) });
-      // Optimistic update
-      set((state) => ({
-        tasks: state.tasks.map((t) =>
-          t.id === taskId ? { ...t, status_id: newStatusId } : t
-        ),
-      }));
+      const newStage = get().stages.find(s => s.id === Number(newStatusId));
+      const tasks = get().tasks.map(t => 
+        String(t.id) === String(taskId) ? { 
+          ...t, 
+          status_id: Number(newStatusId),
+          currentStageId: Number(newStatusId),
+          status_name: newStage?.name || t.status_name,
+          status_category: newStage?.systemCategory || t.status_category
+        } : t
+      );
+      set({ tasks });
+      toast.success('Task status updated');
     } catch (e: any) {
-      set({ error: e.message });
+      toast.error('Failed to update status', { description: e.message });
     }
   },
 
-  updateTaskSprint: async (taskId, sprintId) => {
-    try {
-      const teamId = get().teamId;
-      if (!teamId) throw new Error('No team selected');
-
-      if (sprintId) {
-        // Assign to sprint via dedicated endpoint
-        await api.assignTaskToSprint(teamId, sprintId, taskId);
-      } else {
-        // Find current sprint and remove
-        const task = get().tasks.find((t) => t.id === taskId);
-        if (task?.sprint_id) {
-          await api.removeTaskFromSprint(teamId, task.sprint_id, taskId);
-        } else {
-          // Fallback to generic update
-          await api.updateTask(taskId, teamId, { sprint_id: null });
-        }
-      }
-
-      // Optimistic update
-      set((state) => ({
-        tasks: state.tasks.map((t) =>
-          t.id === taskId ? { ...t, sprint_id: sprintId || undefined } : t
-        ),
-      }));
-
-      // Refresh sprint stats
-      await get().fetchSprints();
-    } catch (e: any) {
-      set({ error: e.message });
-    }
-  },
-
-  updateTaskAssignee: async (taskId, assigneeId) => {
-    try {
-      const teamId = get().teamId;
-      if (!teamId) throw new Error('No team selected');
-      
-      // Optimistic update
-      set((state) => ({
-        tasks: state.tasks.map((t) => t.id === taskId ? { ...t, assignee_id: assigneeId ? String(assigneeId) : undefined } : t)
-      }));
-
-      await api.updateTask(taskId, teamId, { assignee_id: assigneeId ? Number(assigneeId) : null });
-    } catch (e: any) {
-      set({ error: e.message });
-      console.warn("API Error during task assignee update but state was optimistically updated");
-    }
-  },
-
-  updateTaskPriority: async (taskId, priority) => {
-    try {
-      const teamId = get().teamId;
-      if (!teamId) throw new Error('No team selected');
-
-      // Optimistic update
-      set((state) => ({
-        tasks: state.tasks.map((t) => t.id === taskId ? { ...t, priority } : t)
-      }));
-
-      await api.updateTask(taskId, teamId, { priority });
-    } catch (e: any) {
-      set({ error: e.message });
-      console.warn("API Error during task priority update but state was optimistically updated");
-    }
-  },
-
-  updateTaskOrder: async (taskId, sprintId, newOrder) => {
-    try {
-      const teamId = get().teamId;
-      if (!teamId) throw new Error('No team selected');
-
-      // Optimistic update
-      set((state) => ({
-        tasks: state.tasks.map((t) => t.id === taskId ? { ...t, sprint_id: sprintId ?? undefined, order: newOrder } : t)
-      }));
-
-      await api.updateTask(taskId, teamId, { sprint_id: sprintId ? Number(sprintId) : null, order: newOrder });
-    } catch (e: any) {
-      set({ error: e.message });
-      console.warn("API Error during task order update but state was optimistically updated");
-    }
-  },
-
-  updateTaskDetails: async (taskId, data) => {
-    try {
-      const teamId = get().teamId;
-      if (!teamId) throw new Error('No team selected');
-
-      // Optimistic update
-      set((state) => ({
-        tasks: state.tasks.map((t) => t.id === taskId ? { ...t, ...data } : t)
-      }));
-
-      await api.updateTask(taskId, teamId, data);
-    } catch (e: any) {
-      set({ error: e.message });
-      console.error("Failed to update task details", e);
-    }
-  },
-
-  createTask: async (title, statusId, sprintId) => {
-    try {
-      const teamId = get().teamId;
-      if (!teamId) throw new Error('No team selected');
-
-      await api.createTask(teamId, {
-        title,
-        current_status_id: statusId ? Number(statusId) : null,
-        sprint_id: sprintId ? Number(sprintId) : null,
-      });
-
-      await get().fetchTasks();
-      await get().fetchSprints(); // update task counts
-    } catch (e: any) {
-      set({ error: e.message });
-    }
-  },
-
-  deleteTask: async (taskId) => {
-    try {
-      const teamId = get().teamId;
-      if (!teamId) throw new Error('No team selected');
-      await api.deleteTask(taskId, teamId);
-      set((state) => ({ tasks: state.tasks.filter((t) => t.id !== taskId) }));
-      await get().fetchSprints();
-    } catch (e: any) {
-      set({ error: e.message });
-    }
-  },
-
-  // ─────────────────────────────────────────────────────────────────────────
-  // SPRINT CRUD
-  // ─────────────────────────────────────────────────────────────────────────
-
+  // Sprint Management
   createSprint: async (name, goal, startDate, endDate) => {
+    const teamId = get().currentTeamId;
+    if (!teamId) return;
     try {
-      const teamId = get().teamId;
-      if (!teamId) throw new Error('No team selected');
-      const raw = await api.createSprint(teamId, { name, goal, startDate, endDate });
-      const sprint: Sprint = {
-        id: String(raw.id),
-        name: raw.name,
-        goal: raw.goal,
-        status: raw.status,
-        startDate: raw.startDate,
-        endDate: raw.endDate,
-        task_counts: { total: 0, todo: 0, in_progress: 0, done: 0 },
-      };
+      const sprint = await api.createSprint(teamId, { name, goal, startDate, endDate });
       set((state) => ({ sprints: [...state.sprints, sprint] }));
+      toast.success('Sprint created');
       return sprint;
     } catch (e: any) {
-      set({ error: e.message });
-      return null;
+      toast.error('Failed to create sprint', { description: e.message });
     }
   },
 
   updateSprint: async (sprintId, data) => {
+    const teamId = get().currentTeamId;
+    if (!teamId) return;
     try {
-      const teamId = get().teamId;
-      if (!teamId) throw new Error('No team selected');
-      
-      // Optimistic update
+      const updated = await api.updateSprint(teamId, sprintId, data);
       set((state) => ({
-        sprints: state.sprints.map((s) => s.id === sprintId ? { ...s, ...data } : s)
+        sprints: state.sprints.map((s) => (s.id === sprintId ? { ...s, ...updated } : s)),
       }));
-
-      await api.updateSprint(teamId, sprintId, data);
+      toast.success('Sprint updated');
     } catch (e: any) {
-      set({ error: e.message });
-      await get().fetchSprints();
+      toast.error('Failed to update sprint', { description: e.message });
     }
   },
 
   deleteSprint: async (sprintId) => {
+    const teamId = get().currentTeamId;
+    if (!teamId) return;
     try {
-      const teamId = get().teamId;
-      if (!teamId) throw new Error('No team selected');
-      
-      set((state) => ({ sprints: state.sprints.filter(s => s.id !== sprintId) }));
       await api.deleteSprint(teamId, sprintId);
-      await get().fetchTasks(); // Reload tasks since any tasks in the deleted sprint move to backlog
+      set((state) => ({
+        sprints: state.sprints.filter((s) => s.id !== sprintId),
+        tasks: state.tasks.map((t) => (t.sprint_id === Number(sprintId) ? { ...t, sprint_id: null } : t)),
+      }));
+      toast.success('Sprint deleted');
     } catch (e: any) {
-      set({ error: e.message });
-      await get().fetchSprints();
+      toast.error('Failed to delete sprint', { description: e.message });
     }
   },
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // SPRINT LIFECYCLE
-  // ─────────────────────────────────────────────────────────────────────────
-
   startSprint: async (sprintId, data) => {
+    const teamId = get().currentTeamId;
+    if (!teamId) return;
     try {
-      const teamId = get().teamId;
-      if (!teamId) throw new Error('No team selected');
-      await api.startSprint(teamId, sprintId, data);
-      // Refresh both sprints (status changed) and tasks (may have dates updated)
-      await get().fetchSprints();
-      await get().fetchTasks();
+      const updated = await api.startSprint(teamId, sprintId, data);
+      set((state) => ({
+        sprints: state.sprints.map((s) => (s.id === sprintId ? { ...s, ...updated } : s)),
+      }));
+      toast.success('Sprint started');
     } catch (e: any) {
-      // Re-throw so the modal can show the error message
-      set({ error: e.message });
-      throw e;
+      toast.error('Failed to start sprint', { description: e.message });
     }
   },
 
   completeSprint: async (sprintId, rolloverSprintId) => {
+    const teamId = get().currentTeamId;
+    if (!teamId) return;
     try {
-      const teamId = get().teamId;
-      if (!teamId) throw new Error('No team selected');
-      await api.completeSprint(teamId, sprintId, {
-        rollover_sprint_id: rolloverSprintId ? Number(rolloverSprintId) : null,
-      });
-      // Refresh everything — tasks may have moved sprints
-      await Promise.all([get().fetchSprints(), get().fetchTasks()]);
+      const rolloverId = rolloverSprintId === null ? null : Number(rolloverSprintId);
+      await api.completeSprint(teamId, sprintId, { rollover_sprint_id: rolloverId });
+      // Full refresh for consistency as tasks move between sprints/backlog
+      await get().fetchSprints();
+      await get().fetchTasks();
+      toast.success('Sprint completed');
     } catch (e: any) {
-      set({ error: e.message });
-      throw e;
+      toast.error('Failed to complete sprint', { description: e.message });
+    }
+  },
+
+  // Task Management
+  createTask: async (title, statusId, sprintId) => {
+    const teamId = get().currentTeamId;
+    if (!teamId) return;
+    try {
+      const data = {
+        title,
+        current_status_id: statusId ? Number(statusId) : null,
+        sprint_id: sprintId ? Number(sprintId) : null
+      };
+      const task = await api.createTask(teamId, data);
+      set((state) => ({ tasks: [...state.tasks, task] }));
+      toast.success('Task created');
+    } catch (e: any) {
+      toast.error('Failed to create task', { description: e.message });
+    }
+  },
+
+  deleteTask: async (taskId) => {
+    const teamId = get().currentTeamId;
+    if (!teamId) return;
+    try {
+      await api.deleteTask(taskId, teamId);
+      set((state) => ({
+        tasks: state.tasks.filter((t) => String(t.id) !== String(taskId)),
+      }));
+      toast.success('Task deleted');
+    } catch (e: any) {
+      toast.error('Failed to delete task', { description: e.message });
+    }
+  },
+
+  updateTaskOrder: async (taskId, sprintId, order) => {
+    const teamId = get().currentTeamId;
+    if (!teamId) return;
+    try {
+      const sid = sprintId === null ? null : Number(sprintId);
+      await api.updateTask(taskId, teamId, { sprint_id: sid, order });
+      set((state) => ({
+        tasks: state.tasks.map((t) => (String(t.id) === String(taskId) ? { ...t, sprint_id: sid, order } : t)),
+      }));
+    } catch (e: any) {
+      toast.error('Failed to update task order', { description: e.message });
+      // Revert local state if needed (refetch)
+      await get().fetchTasks();
+    }
+  },
+
+  updateTaskSprint: async (taskId, sprintId) => {
+    const teamId = get().currentTeamId;
+    if (!teamId) return;
+    try {
+      if (sprintId === null) {
+        await api.removeTaskFromSprint(teamId, 'any', taskId); // In existing API 'any' usually works or we use updateTask
+      } else {
+        await api.assignTaskToSprint(teamId, String(sprintId), taskId);
+      }
+      const sid = sprintId === null ? null : Number(sprintId);
+      set((state) => ({
+        tasks: state.tasks.map((t) => (String(t.id) === String(taskId) ? { ...t, sprint_id: sid } : t)),
+      }));
+    } catch (e: any) {
+      toast.error('Failed to move task', { description: e.message });
+    }
+  },
+
+  updateTaskDetails: async (taskId, data) => {
+    const teamId = get().currentTeamId;
+    if (!teamId) return;
+    try {
+      const updated = await api.updateTask(taskId, teamId, data as any);
+      set((state) => ({
+        tasks: state.tasks.map((t) => (String(t.id) === String(taskId) ? { ...t, ...updated } : t)),
+      }));
+      toast.success('Task updated');
+    } catch (e: any) {
+      toast.error('Failed to update task', { description: e.message });
     }
   },
 }));

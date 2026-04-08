@@ -35,7 +35,18 @@ export interface WorkflowStage {
   name: string;
   stage_order: number;
   is_terminal: boolean;
-  category?: 'BACKLOG' | 'ACTIVE' | 'REVIEW' | 'VALIDATION' | 'DONE' | 'BLOCKED';
+  category?: 'BACKLOG' | 'TODO' | 'ACTIVE' | 'REVIEW' | 'VALIDATION' | 'DONE' | 'BLOCKED';
+  intentTag?: string;
+}
+
+export interface ProjectMember {
+  id: string;
+  user_id: string;
+  role_id: string;
+  email: string;
+  full_name: string;
+  role_name: string;
+  created_at: string;
 }
 
 export interface Project {
@@ -63,6 +74,7 @@ interface ProjectState {
   currentTeamId: string | null;
   roles: Role[];
   members: TeamMember[];
+  projectMembers: ProjectMember[];
   workflowStages: WorkflowStage[];
   permissions: string[];
   loading: boolean;
@@ -74,7 +86,7 @@ interface ProjectState {
 
   // Projects
   fetchProjects: () => Promise<void>;
-  fetchPermissions: (teamId: string) => Promise<void>;
+  fetchPermissions: (teamId?: string, projectId?: string) => Promise<void>;
   setCurrentProject: (project: Project | null) => void;
   setCurrentTeamId: (teamId: string | null) => void;
   createProject: (data: { name: string }) => Promise<Project>;
@@ -94,13 +106,14 @@ interface ProjectState {
 
   // Members
   fetchMembers: (projectId: string) => Promise<void>;
-  inviteMember: (projectId: string, email: string, roleId: string) => Promise<void>;
+  fetchProjectMembers: (projectId: string) => Promise<void>;
+  inviteMember: (projectId: string, email: string, roleId: string, teamId?: string) => Promise<void>;
   updateMemberRole: (projectId: string, memberId: string, roleId: string) => Promise<void>;
   removeMember: (projectId: string, memberId: string) => Promise<void>;
 
   // Workflow stages
   fetchWorkflowStages: (projectId: string) => Promise<void>;
-  createWorkflowStage: (projectId: string, data: { name: string; stage_order: number; is_terminal?: boolean; category?: string }) => Promise<WorkflowStage>;
+  createWorkflowStage: (projectId: string, data: { name: string; stage_order: number; is_terminal?: boolean; category?: string; intentTag?: string }) => Promise<WorkflowStage>;
   updateWorkflowStage: (projectId: string, stageId: string, data: Partial<WorkflowStage>) => Promise<void>;
   deleteWorkflowStage: (projectId: string, stageId: string) => Promise<void>;
   reorderWorkflowStages: (projectId: string, stages: { id: string; stage_order: number }[]) => Promise<void>;
@@ -146,6 +159,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   currentTeamId: null,
   roles: [],
   members: [],
+  projectMembers: [],
   workflowStages: [],
   permissions: [],
   loading: false,
@@ -164,9 +178,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
 
-  fetchPermissions: async (teamId) => {
+  fetchPermissions: async (teamId, projectId) => {
     try {
-      const data = await api.myPermissions(teamId);
+      const data = await api.myPermissions(teamId, projectId);
       set({ permissions: data.permissions || [] });
     } catch (e) {
       console.error('Failed to fetch permissions', e);
@@ -269,6 +283,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   fetchRoles: async (projectId) => {
+    set({ loading: true, error: null });
     try {
       const data = await api.listRoles(projectId);
       set({
@@ -280,9 +295,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           access_level: inferAccessLevel(r.permission_codes || []),
           created_at: r.createdAt,
         })),
+        loading: false,
       });
     } catch (e: any) {
-      set({ error: e.message });
+      set({ error: e.message, loading: false });
     }
   },
 
@@ -356,12 +372,31 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     }
   },
 
-  inviteMember: async (projectId, email, roleId) => {
+  fetchProjectMembers: async (projectId) => {
+    try {
+      const data = await api.listProjectMembers(projectId);
+      set({
+        projectMembers: data.map((m: any) => ({
+          id: String(m.id),
+          user_id: String(m.user_id),
+          role_id: String(m.role_id),
+          email: m.email,
+          full_name: m.name,
+          role_name: m.role_name,
+          created_at: m.created_at,
+        })),
+      });
+    } catch (e: any) {
+      console.error('Failed to fetch project members', e);
+    }
+  },
+
+  inviteMember: async (projectId, email, roleId, teamId) => {
     set({ loading: true, error: null });
     try {
-      const teamId = get().currentTeamId;
-      if (!teamId) throw new Error('No team selected');
-      await api.inviteMember(teamId, { email, name: email.split('@')[0] || email, role_id: roleId });
+      const targetTeamId = teamId || get().currentTeamId;
+      if (!targetTeamId) throw new Error('No team selected');
+      await api.inviteMember(targetTeamId, { email, name: email.split('@')[0] || email, role_id: roleId });
       await get().fetchMembers(projectId);
       set({ loading: false });
     } catch (e: any) {
@@ -397,6 +432,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   fetchWorkflowStages: async (projectId) => {
+    set({ loading: true, error: null });
     try {
       const data = await api.listStatuses(projectId);
       set({
@@ -406,10 +442,12 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           category: s.category,
           stage_order: s.stageOrder,
           is_terminal: s.isTerminal,
+          intentTag: s.intentTag,
         })),
+        loading: false,
       });
     } catch (e: any) {
-      set({ error: e.message });
+      set({ error: e.message, loading: false });
     }
   },
 
@@ -419,7 +457,8 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       const getCategory = (name: string, isTerminal: boolean) => {
         if (isTerminal) return 'DONE';
         const n = name.toLowerCase();
-        if (n.includes('backlog') || n.includes('to do') || n.includes('todo') || n === 'open') return 'BACKLOG';
+        if (n.includes('to do') || n.includes('todo')) return 'TODO';
+        if (n.includes('backlog') || n === 'open') return 'BACKLOG';
         if (n.includes('review') || n.includes('pr ')) return 'REVIEW';
         if (n.includes('test') || n.includes('qa') || n.includes('uat') || n.includes('validat')) return 'VALIDATION';
         return 'ACTIVE';
@@ -428,6 +467,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       const created = await api.createStatus(projectId, {
         name: data.name,
         category: data.category || getCategory(data.name, !!data.is_terminal),
+        intentTag: data.intentTag,
         stage_order: data.stage_order,
         is_terminal: !!data.is_terminal,
       });
@@ -435,6 +475,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
         id: String(created.id),
         name: created.name,
         category: created.category,
+        intentTag: created.intentTag,
         stage_order: created.stageOrder,
         is_terminal: created.isTerminal,
       };

@@ -52,6 +52,8 @@ export const api = {
     apiRequest<any>('/projects', { method: 'POST', body: JSON.stringify({ name: data.name }) }),
   completeProjectSetup: (projectId: string) =>
     apiRequest<any>(`/projects/${projectId}/complete-setup`, { method: 'POST' }),
+  listProjectMembers: (projectId: string) => 
+    apiRequest<any[]>(`/projects/${projectId}/members`),
 
   // ── Teams ──────────────────────────────────────────────────────────────────
   listTeams: (projectId: string) => apiRequest<any[]>(`/projects/${projectId}/teams`),
@@ -73,14 +75,33 @@ export const api = {
   deleteRole: (projectId: string, roleId: string) =>
     apiRequest<void>(`/projects/${projectId}/roles/${roleId}`, { method: 'DELETE' }),
 
-  // ── Workflow statuses (project-scoped) ──────────────────────────────────────
-  listStatuses: (projectId: string) => apiRequest<any[]>(`/projects/${projectId}/workflow/statuses`),
-  createStatus: (projectId: string, data: { name: string; category: string; stage_order: number; is_terminal?: boolean }) =>
-    apiRequest<any>(`/projects/${projectId}/workflow/statuses`, { method: 'POST', body: JSON.stringify(data) }),
-  updateStatus: (projectId: string, statusId: string, data: Partial<{ name: string; category: string; stage_order: number; is_terminal: boolean }>) =>
-    apiRequest<any>(`/projects/${projectId}/workflow/statuses/${statusId}`, { method: 'PATCH', body: JSON.stringify(data) }),
+  // ── Workflow stages (project-scoped) ──────────────────────────────────────
+  listStatuses: (projectId: string) => apiRequest<any[]>(`/projects/${projectId}/stages`),
+  createStatus: (projectId: string, data: { name: string; category: string; stage_order: number; is_terminal?: boolean; intentTag?: string }) =>
+    apiRequest<any>(`/projects/${projectId}/stages`, { 
+      method: 'POST', 
+      body: JSON.stringify({
+        name: data.name,
+        systemCategory: data.category,
+        intentTag: data.intentTag,
+        positionOrder: data.stage_order,
+        isBlocking: !!data.is_terminal
+      }) 
+    }),
+  updateStatus: (projectId: string, statusId: string, data: Partial<{ name: string; category: string; stage_order: number; is_terminal: boolean; intentTag: string }>) => {
+    const payload: any = {};
+    if (data.name !== undefined) payload.name = data.name;
+    if (data.category !== undefined) payload.systemCategory = data.category;
+    if (data.intentTag !== undefined) payload.intentTag = data.intentTag;
+    if (data.stage_order !== undefined) payload.positionOrder = data.stage_order;
+    if (data.is_terminal !== undefined) payload.isBlocking = data.is_terminal;
+    return apiRequest<any>(`/projects/${projectId}/stages/${statusId}`, { 
+      method: 'PATCH', 
+      body: JSON.stringify(payload) 
+    });
+  },
   deleteStatus: (projectId: string, statusId: string) =>
-    apiRequest<void>(`/projects/${projectId}/workflow/statuses/${statusId}`, { method: 'DELETE' }),
+    apiRequest<void>(`/projects/${projectId}/stages/${statusId}`, { method: 'DELETE' }),
 
   // ── Members / invitations (team-scoped) ────────────────────────────────────
   listMembers: (teamId: string) => apiRequest<any[]>(`/teams/${teamId}/members`, {}, { team_id: teamId }),
@@ -120,9 +141,9 @@ export const api = {
 
   // ── Sprints (team-scoped) ──────────────────────────────────────────────────
   listSprints: (teamId: string) =>
-    apiRequest<any[]>(`/teams/${teamId}/sprints/`),
+    apiRequest<any[]>(`/teams/${teamId}/sprints`),
   createSprint: (teamId: string, data: { name: string; goal?: string; startDate?: string; endDate?: string }) =>
-    apiRequest<any>(`/teams/${teamId}/sprints/`, { method: 'POST', body: JSON.stringify(data) }),
+    apiRequest<any>(`/teams/${teamId}/sprints`, { method: 'POST', body: JSON.stringify(data) }),
   updateSprint: (teamId: string, sprintId: string, data: { name?: string; goal?: string; startDate?: string; endDate?: string }) =>
     apiRequest<any>(`/teams/${teamId}/sprints/${sprintId}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteSprint: (teamId: string, sprintId: string) =>
@@ -162,7 +183,8 @@ export const api = {
     }),
 
   // ── Permissions self-check ────────────────────────────────────────────────
-  myPermissions: (teamId: string) => apiRequest<{ permissions: string[] }>('/me/permissions', undefined, { team_id: teamId }),
+  myPermissions: (teamId?: string, projectId?: string) => 
+    apiRequest<{ permissions: string[] }>('/me/permissions', undefined, { team_id: teamId, project_id: projectId }),
 
   // ── GitHub App Integration ────────────────────────────────────────────────
   getGitHubInstallUrl: (teamId?: string, returnUrl?: string) => 

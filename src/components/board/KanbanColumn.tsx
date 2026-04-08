@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useWorkflowStore, type Task, type WorkflowStatus } from '@/stores/workflowStore';
+import { useWorkflowStore, type Task, type WorkflowStage } from '@/stores/workflowStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { TaskCard } from './TaskCard';
 import { Droppable, Draggable } from '@hello-pangea/dnd';
@@ -27,7 +27,7 @@ const categoryBg: Record<string, string> = {
 };
 
 interface KanbanColumnProps {
-  status: WorkflowStatus;
+  status: WorkflowStage;
   tasks: Task[];
 }
 
@@ -62,8 +62,8 @@ export function KanbanColumn({ status, tasks }: KanbanColumnProps) {
     <div
       className={cn(
         'flex w-[320px] shrink-0 flex-col rounded-xl border-t-[3px] shadow-[0_2px_10px_-2px_rgba(0,0,0,0.01)] relative',
-        categoryColors[status.category] || 'border-t-border',
-        categoryBg[status.category] || 'bg-muted'
+        categoryColors[status.systemCategory] || 'border-t-border',
+        categoryBg[status.systemCategory] || 'bg-muted'
       )}
     >
       {/* Column Header */}
@@ -75,12 +75,12 @@ export function KanbanColumn({ status, tasks }: KanbanColumnProps) {
           </span>
         </div>
         <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/50">
-          {status.category}
+          {status.systemCategory}
         </span>
       </div>
 
       {/* Cards */}
-      <Droppable droppableId={status.id}>
+      <Droppable droppableId={String(status.id)}>
         {(provided, snapshot) => (
           <div
             ref={provided.innerRef}

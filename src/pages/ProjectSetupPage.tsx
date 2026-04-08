@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useProjectStore, ACCESS_LEVELS, AccessLevel } from '@/stores/projectStore';
+import { useAuthStore } from '@/stores/authStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -35,9 +36,11 @@ import {
   Users,
   Workflow,
   X,
+  Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { api } from '@/lib/api';
+import { classifyWorkflowStage } from '@/features/workflow-builder/workflowApi';
 
 const STEPS = [
   { id: 'roles', label: 'Define Roles', icon: Shield, description: 'Create roles & assign access levels' },
@@ -51,32 +54,30 @@ const WORKFLOW_PRESETS = [
   {
     name: 'Standard Scrum',
     stages: [
-      { name: 'Backlog', category: 'BACKLOG', is_terminal: false },
-      { name: 'To Do', category: 'ACTIVE', is_terminal: false },
-      { name: 'In Progress', category: 'ACTIVE', is_terminal: false },
-      { name: 'Code Review', category: 'REVIEW', is_terminal: false },
-      { name: 'Testing', category: 'VALIDATION', is_terminal: false },
-      { name: 'Done', category: 'DONE', is_terminal: true },
+      { name: 'To Do', category: 'TODO', intentTag: 'CORE_TODO', is_terminal: false },
+      { name: 'In Progress', category: 'ACTIVE', intentTag: 'CORE_PROGRESS', is_terminal: false },
+      { name: 'Code Review', category: 'REVIEW', intentTag: 'CORE_REVIEW', is_terminal: false },
+      { name: 'Testing', category: 'VALIDATION', intentTag: 'CORE_VALIDATION', is_terminal: false },
+      { name: 'Done', category: 'DONE', intentTag: 'CORE_DONE', is_terminal: true },
     ],
   },
   {
     name: 'Simple Kanban',
     stages: [
-      { name: 'To Do', category: 'BACKLOG', is_terminal: false },
-      { name: 'In Progress', category: 'ACTIVE', is_terminal: false },
-      { name: 'Done', category: 'DONE', is_terminal: true },
+      { name: 'To Do', category: 'TODO', intentTag: 'CORE_TODO', is_terminal: false },
+      { name: 'In Progress', category: 'ACTIVE', intentTag: 'CORE_PROGRESS', is_terminal: false },
+      { name: 'Done', category: 'DONE', intentTag: 'CORE_DONE', is_terminal: true },
     ],
   },
   {
     name: 'Full Pipeline',
     stages: [
-      { name: 'Backlog', category: 'BACKLOG', is_terminal: false },
-      { name: 'Development', category: 'ACTIVE', is_terminal: false },
-      { name: 'Code Review', category: 'REVIEW', is_terminal: false },
-      { name: 'QA', category: 'VALIDATION', is_terminal: false },
-      { name: 'UAT', category: 'VALIDATION', is_terminal: false },
-      { name: 'Deployment', category: 'ACTIVE', is_terminal: false },
-      { name: 'Done', category: 'DONE', is_terminal: true },
+      { name: 'Development', category: 'ACTIVE', intentTag: 'CORE_PROGRESS', is_terminal: false },
+      { name: 'Code Review', category: 'REVIEW', intentTag: 'CORE_REVIEW', is_terminal: false },
+      { name: 'QA', category: 'VALIDATION', intentTag: 'CORE_VALIDATION', is_terminal: false },
+      { name: 'UAT', category: 'VALIDATION', intentTag: 'CORE_VALIDATION', is_terminal: false },
+      { name: 'Deployment', category: 'ACTIVE', intentTag: 'CORE_PROGRESS', is_terminal: false },
+      { name: 'Done', category: 'DONE', intentTag: 'CORE_DONE', is_terminal: true },
     ],
   },
 ];
@@ -102,9 +103,13 @@ export default function ProjectSetupPage() {
     fetchWorkflowStages,
     createWorkflowStage,
     deleteWorkflowStage,
+    updateWorkflowStage,
     reorderWorkflowStages,
     setCurrentProject,
+    inviteMember,
   } = useProjectStore();
+
+  const { user } = useAuthStore();
 
   const [activeStep, setActiveStep] = useState<StepId>('roles');
   const [newRoleName, setNewRoleName] = useState('');
@@ -115,7 +120,10 @@ export default function ProjectSetupPage() {
 
   // Workflow state
   const [newStageName, setNewStageName] = useState('');
-  const [creatingStage, setCreatingStage] = useState(false);
+  const [isClassifying, setIsClassifying] = useState(false);
+  const [localStages, setLocalStages] = useState<any[]>([]);
+  const [isLocalInitialized, setIsLocalInitialized] = useState(false);
+  const [isSavingWorkflow, setIsSavingWorkflow] = useState(false);
   const [applyingPreset, setApplyingPreset] = useState(false);
 
   // Teams state
@@ -137,6 +145,24 @@ export default function ProjectSetupPage() {
           .then((p) => setCurrentProject(p))
           .catch((err) => console.error('Failed to auto-fetch project details', err));
       }
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    if (!isLocalInitialized && workflowStages.length > 0) {
+      setLocalStages(workflowStages.map(s => ({...s})));
+      setIsLocalInitialized(true);
+    } else if (workflowStages.length === 0 && !loading && !isLocalInitialized) {
+      // If no stages at all
+      setLocalStages([]);
+      setIsLocalInitialized(true);
+    }
+  }, [workflowStages, loading, isLocalInitialized]);
+
+  // AUTO-FETCH PROJECT MEMBERS (The New Layer)
+  useEffect(() => {
+    if (projectId) {
+      useProjectStore.getState().fetchProjectMembers(projectId);
     }
   }, [projectId]);
 
@@ -184,70 +210,167 @@ export default function ProjectSetupPage() {
   };
 
   const handleAddStage = async () => {
-    if (!newStageName.trim() || !projectId) return;
-    setCreatingStage(true);
-    try {
-      const nextOrder = workflowStages.length;
-      await createWorkflowStage(projectId, {
-        name: newStageName.trim(),
+    if (!newStageName.trim()) return;
+
+    const getCategoryDetails = (name: string): { category: string; intentTag: string; isError?: boolean; errorMsg?: string } | null => {
+      const n = name.toLowerCase();
+      // REJECT BACKLOG
+      if (n.includes('backlog') || n === 'open' || n.includes('idea') || n.includes('queue')) {
+        return { category: 'INVALID', intentTag: 'CORE_INVALID', isError: true, errorMsg: 'Backlog is managed separately in the backlog view. It cannot be added as a board column.' };
+      }
+      // TODO
+      if (n.includes('to do') || n.includes('todo') || n.includes('pending') || n.includes('ready')) return { category: 'TODO', intentTag: 'CORE_TODO' };
+      // REVIEW
+      if (n.includes('review') || n.includes('pr ') || n.includes('approval')) return { category: 'REVIEW', intentTag: 'CORE_REVIEW' };
+      // VALIDATION
+      if (n.includes('test') || n.includes('qa') || n.includes('uat') || n.includes('validat') || n.includes('staging')) return { category: 'VALIDATION', intentTag: 'CORE_VALIDATION' };
+      // DONE
+      if (n.includes('done') || n.includes('complet') || n.includes('finish') || n.includes('merg') || n.includes('closed')) return { category: 'DONE', intentTag: 'CORE_DONE' };
+      // BLOCKED
+      if (n.includes('block') || n.includes('stuck') || n.includes('wait') || n.includes('depend')) return { category: 'BLOCKED', intentTag: 'CORE_BLOCKED' };
+      // ACTIVE
+      if (n.includes('progress') || n.includes('doing') || n.includes('dev') || n.includes('work') || n.includes('implement') || n.includes('active')) return { category: 'ACTIVE', intentTag: 'CORE_PROGRESS' };
+
+      // Ambiguous: Trigger AI
+      return null;
+    };
+
+    const targetName = newStageName.trim();
+    const offlineMatch = getCategoryDetails(targetName);
+
+    if (offlineMatch) {
+      if (offlineMatch.isError) {
+        toast.warning('Invalid Stage', { description: offlineMatch.errorMsg });
+        setNewStageName('');
+        return;
+      }
+      // ⚡ FAST PATH: Instant offline heuristic match
+      const nextOrder = localStages.length;
+      setLocalStages([...localStages, {
+        id: `temp-${Date.now()}`,
+        name: targetName,
+        category: offlineMatch.category,
+        intentTag: offlineMatch.intentTag,
         stage_order: nextOrder,
         is_terminal: false,
-      });
+      }]);
       setNewStageName('');
-    } catch (err) {
-      console.error('Failed to add stage:', err);
-    } finally {
-      setCreatingStage(false);
-    }
-  };
-
-  const handleApplyPreset = async (stages: any[]) => {
-    if (!projectId) return;
-    setApplyingPreset(true);
-    try {
-      // Delete existing stages in parallel
-      await Promise.all(workflowStages.map((s) => deleteWorkflowStage(projectId, s.id)));
+      toast.success(`Automatically Classified: ${offlineMatch.category}`, {
+        description: `Intent: ${offlineMatch.intentTag}`
+      });
+    } else {
+      // 🧠 SMART PATH: Deep AI evaluation for ambiguous names
+      if (!projectId) {
+        toast.error('Project ID missing for AI reasoning');
+        return;
+      }
       
-      // Create new stages in parallel
-      await Promise.all(
-        stages.map((stage, i) =>
-          createWorkflowStage(projectId, {
-            name: stage.name,
-            category: stage.category,
-            stage_order: i,
-            is_terminal: stage.is_terminal,
-          })
-        )
-      );
-    } finally {
-      setApplyingPreset(false);
+      try {
+        setIsClassifying(true);
+        const res = await classifyWorkflowStage(projectId, targetName);
+        
+        if (res.systemCategory === 'INVALID') {
+            toast.warning(`Invalid Workflow Stage`, {
+                description: res.reasoning || `"${targetName}" does not appear to be a valid task lifecycle stage.`
+            });
+            return;
+        }
+
+        const nextOrder = localStages.length;
+        setLocalStages([...localStages, {
+          id: `temp-${Date.now()}`,
+          name: targetName,
+          category: res.systemCategory,
+          intentTag: res.intentTag,
+          stage_order: nextOrder,
+          is_terminal: false,
+        }]);
+        setNewStageName('');
+        
+        toast.success(`AI Classified: ${res.systemCategory}`, {
+          description: `Intent: ${res.intentTag} - ${res.reasoning}`
+        });
+      } catch (e: any) {
+        toast.error('AI Auto-classify failed', { description: e.message });
+      } finally {
+        setIsClassifying(false);
+      }
     }
   };
 
-  const handleMoveStage = async (index: number, direction: 'up' | 'down') => {
-    if (!projectId || applyingPreset) return;
-    const newIndex = direction === 'up' ? index - 1 : index + 1;
-    if (newIndex < 0 || newIndex >= workflowStages.length) return;
+  const handleApplyPreset = (stages: any[]) => {
+    if (!projectId) return;
+    setLocalStages(stages.map((stage, i) => ({
+      id: `temp-${Date.now()}-${i}`,
+      name: stage.name,
+      category: stage.category,
+      intentTag: stage.intentTag,
+      stage_order: i,
+      is_terminal: stage.is_terminal,
+    })));
+  };
 
-    const newStages = [...workflowStages];
+  const handleMoveStage = (index: number, direction: 'up' | 'down') => {
+    if (!projectId) return;
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= localStages.length) return;
+
+    const newStages = [...localStages];
     const temp = newStages[index];
     newStages[index] = newStages[newIndex];
     newStages[newIndex] = temp;
+    
+    newStages.forEach((s, i) => s.stage_order = i);
+    setLocalStages(newStages);
+  };
 
-    const updates = newStages.map((stage, i) => ({
-      id: stage.id,
-      stage_order: i,
-    }));
+  const handleLocalDeleteStage = (id: string) => {
+    setLocalStages(localStages.filter(s => s.id !== id));
+  };
 
-    await reorderWorkflowStages(projectId, updates);
+  const handleSaveWorkflow = async () => {
+    if (!projectId) return;
+    setIsSavingWorkflow(true);
+    try {
+      const deleted = workflowStages.filter(s => !localStages.find(ls => ls.id === s.id));
+      for (const s of deleted) {
+        try { await deleteWorkflowStage(projectId, s.id); } catch(e) { console.error('delete failed', e); }
+      }
+      
+      for (let i = 0; i < localStages.length; i++) {
+        const ls = localStages[i];
+        if (ls.id.toString().startsWith('temp-')) {
+          await createWorkflowStage(projectId, {
+            name: ls.name,
+            category: ls.category,
+            intentTag: ls.intentTag,
+            stage_order: i,
+            is_terminal: ls.is_terminal
+          });
+        } else {
+          const original = workflowStages.find(s => s.id === ls.id);
+          if (original && (original.stage_order !== i || original.name !== ls.name)) {
+            await updateWorkflowStage(projectId, ls.id, { ...ls, stage_order: i });
+          }
+        }
+      }
+      
+      await fetchWorkflowStages(projectId);
+      setIsLocalInitialized(false);
+    } catch (e: any) {
+      toast.error('Failed to save workflow stages', { description: e.message });
+    } finally {
+      setIsSavingWorkflow(false);
+    }
   };
 
   const handleCreateTeam = async () => {
     if (!newTeamName.trim() || !projectId) return;
     setCreatingTeam(true);
     try {
-      await createTeam(projectId, { name: newTeamName.trim() });
+      const team = await createTeam(projectId, { name: newTeamName.trim() });
       setNewTeamName('');
+      toast.success(`Team "${team.name}" provisioned and linked successfully`);
     } catch (err) {
       console.error('Failed to create team:', err);
     } finally {
@@ -283,7 +406,7 @@ export default function ProjectSetupPage() {
   };
 
   const canProceedFromRoles = roles.length > 0;
-  const canProceedFromWorkflow = workflowStages.length >= 2;
+  const canProceedFromWorkflow = localStages.length >= 2;
 
   const getAccessBadge = (level: AccessLevel) => {
     const info = ACCESS_LEVELS.find((a) => a.value === level);
@@ -300,8 +423,13 @@ export default function ProjectSetupPage() {
 
   const [savingStep, setSavingStep] = useState<StepId | null>(null);
 
-  const handleSaveStep = (step: StepId) => {
+  const handleSaveStep = async (step: StepId) => {
     setSavingStep(step);
+    
+    if (step === 'workflow') {
+      await handleSaveWorkflow();
+    }
+    
     // Mimic API latency for a "good" UX feel as background syncing is already happening
     setTimeout(() => {
       setSavingStep(null);
@@ -724,7 +852,7 @@ export default function ProjectSetupPage() {
                    <h2 className="text-lg font-bold flex items-center gap-2">
                     <Workflow className="h-5 w-5 text-primary" />
                     Task Lifecycle Pipeline
-                    <Badge variant="outline" className="ml-2 font-normal text-[10px] px-1 h-4">{workflowStages.length}</Badge>
+                    <Badge variant="outline" className="ml-2 font-normal text-[10px] px-1 h-4">{localStages.length}</Badge>
                   </h2>
                 </div>
 
@@ -740,7 +868,7 @@ export default function ProjectSetupPage() {
                   ) : (
                     <div className="space-y-3">
                       <AnimatePresence mode="popLayout" initial={false}>
-                        {workflowStages.map((stage, i) => (
+                        {localStages.map((stage, i) => (
                           <motion.div
                             key={stage.id}
                             layout
@@ -775,7 +903,7 @@ export default function ProjectSetupPage() {
                                 size="icon" 
                                 className="h-7 w-7 text-muted-foreground hover:bg-muted"
                                 onClick={() => handleMoveStage(i, 'down')}
-                                disabled={i === workflowStages.length - 1}
+                                disabled={i === localStages.length - 1}
                               >
                                 <ChevronDown className="h-4 w-4" />
                               </Button>
@@ -784,8 +912,8 @@ export default function ProjectSetupPage() {
                                 variant="ghost"
                                 size="icon"
                                 className="h-7 w-7 text-destructive/40 hover:text-destructive hover:bg-destructive/5"
-                                onClick={() => projectId && deleteWorkflowStage(projectId, stage.id)}
-                                disabled={workflowStages.length <= 2}
+                                onClick={() => handleLocalDeleteStage(stage.id)}
+                                disabled={localStages.length <= 2}
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
                               </Button>
@@ -804,11 +932,15 @@ export default function ProjectSetupPage() {
                         />
                         <Button 
                           onClick={handleAddStage} 
-                          disabled={!newStageName.trim() || creatingStage} 
+                          disabled={!newStageName.trim() || isClassifying} 
                           size="sm" 
                           className="h-8 px-4 rounded-lg bg-foreground text-background hover:bg-foreground/90 transition-transform active:scale-95"
                         >
-                          {creatingStage ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3.5 w-3.5 mr-1" />}
+                          {isClassifying ? (
+                            <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                          ) : (
+                            <Sparkles className="h-3.5 w-3.5 mr-1" />
+                          )}
                           Add Stage
                         </Button>
                       </div>
@@ -823,8 +955,16 @@ export default function ProjectSetupPage() {
                 <Button variant="ghost" onClick={() => setActiveStep('roles')} className="rounded-xl">
                   Back to Roles
                 </Button>
-                <Button onClick={() => setActiveStep('teams')} disabled={!canProceedFromWorkflow} className="rounded-xl px-6">
-                  Finalize Teams
+                <Button 
+                  onClick={async () => {
+                     await handleSaveWorkflow();
+                     setActiveStep('teams');
+                  }} 
+                  disabled={!canProceedFromWorkflow || isSavingWorkflow} 
+                  className="rounded-xl px-6"
+                >
+                  {isSavingWorkflow ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Finalize Task Flow
                   <ChevronRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>

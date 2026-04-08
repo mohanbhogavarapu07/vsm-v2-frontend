@@ -133,7 +133,7 @@ export function BacklogView() {
 
   const filteredTasksForSprint = (sprintId: string) =>
     tasks
-      .filter((t) => t.sprint_id === sprintId && matchFilters(t))
+      .filter((t) => t.sprint_id === Number(sprintId) && matchFilters(t))
       .sort((a, b) => (a.order || 1000) - (b.order || 1000));
 
   const handleDragEnd = (result: DropResult) => {
@@ -204,7 +204,7 @@ export function BacklogView() {
   };
 
   return (
-    <div className="flex flex-col h-full bg-background overflow-y-auto pb-20">
+    <div className="flex flex-col h-full bg-background pb-20">
       
       {/* ── Toolbar ───────────────────────────────────────────────────────── */}
       <div className="sticky top-0 z-20 flex flex-col gap-2 px-8 py-4 bg-background border-b border-border shadow-sm">
@@ -266,7 +266,7 @@ export function BacklogView() {
                     <SelectContent>
                       <SelectItem value="all">All Statuses</SelectItem>
                       {useWorkflowStore.getState().statuses.map(s => (
-                        <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                        <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -514,7 +514,7 @@ function SprintSection({
   const { permissions } = useProjectStore();
   const hasPermission = (perm: string) => permissions.includes(perm);
 
-  const { task_counts } = sprint;
+  const task_counts = sprint.task_counts || { total: 0, todo: 0, in_progress: 0, done: 0 };
   const incompleteTasks = tasks.filter((t) => t.status_category !== 'DONE').length;
   const plannedSprints = allSprints.filter(
     (s) => s.status === 'PLANNED' && s.id !== sprint.id
@@ -769,7 +769,7 @@ function BacklogItem({ task, index }: { task: Task; index: number }) {
   };
 
   return (
-    <Draggable draggableId={task.id} index={index}>
+    <Draggable draggableId={String(task.id)} index={index}>
       {(provided, snapshot) => (
         <div
           ref={provided.innerRef}
@@ -790,7 +790,7 @@ function BacklogItem({ task, index }: { task: Task; index: number }) {
           </div>
 
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-[12px] font-mono text-muted-foreground uppercase">{task.id}</span>
+            <span className="text-[12px] font-mono text-muted-foreground uppercase">{String(task.id)}</span>
           </div>
 
           <div className="flex-1 min-w-0 px-2 flex items-center gap-2">
