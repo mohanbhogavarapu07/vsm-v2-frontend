@@ -95,8 +95,8 @@ export function SummaryBoard({ onNavigateToBoard }: SummaryBoardProps) {
     let dueSoon = 0;
 
     tasks.forEach((task) => {
-      const createdAt = safeParseDate(task.created_at);
-      const updatedAt = safeParseDate(task.updated_at);
+      const createdAt = safeParseDate(task.createdAt);
+      const updatedAt = safeParseDate(task.updatedAt);
 
       // Completed in last 7 days
       if (task.status_category === 'DONE' && updatedAt && isAfter(updatedAt, sevenDaysAgo)) {
@@ -164,10 +164,10 @@ export function SummaryBoard({ onNavigateToBoard }: SummaryBoardProps) {
 
   const recentActivity = useMemo(() => {
     return [...tasks]
-      .filter((t) => t.updated_at)
+      .filter((t) => t.updatedAt)
       .sort((a, b) => {
-        const da = safeParseDate(a.updated_at)?.getTime() || 0;
-        const db = safeParseDate(b.updated_at)?.getTime() || 0;
+        const da = safeParseDate(a.updatedAt)?.getTime() || 0;
+        const db = safeParseDate(b.updatedAt)?.getTime() || 0;
         return db - da;
       })
       .slice(0, activityExpanded ? 20 : 6);
@@ -451,7 +451,7 @@ export function SummaryBoard({ onNavigateToBoard }: SummaryBoardProps) {
                             ? AVATAR_COLORS[members.indexOf(member) % AVATAR_COLORS.length]
                             : 'bg-slate-400';
                           const action = describeActivity(task);
-                          const timeAgo = safeParseDate(task.updated_at);
+                          const timeAgo = safeParseDate(task.updatedAt);
                           const statusLabel = STATUS_LABELS[task.status_category || 'BACKLOG'] || task.status_name || 'Unknown';
 
                           return (
