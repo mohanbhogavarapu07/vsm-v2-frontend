@@ -1,5 +1,6 @@
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useProjectStore } from '@/stores/projectStore';
+import { SidebarTeamsSkeleton } from '@/components/ui/PageSkeleton';
 import {
   Home,
   Star,
@@ -28,7 +29,7 @@ export function AppSidebar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { projectId, teamId } = useParams<{ projectId: string, teamId: string }>();
-  const { teams, fetchTeams, setCurrentTeamId, currentProject, permissions } = useProjectStore();
+  const { teams, fetchTeams, setCurrentTeamId, currentProject, permissions, teamsLoading } = useProjectStore();
 
   // Sync state with URL but allow manual persistence
   useEffect(() => {
@@ -172,35 +173,38 @@ export function AppSidebar() {
             </button>
           )}
 
-          {/* Teams List (Shown if section is expanded and project context exists) */}
           {!collapsed && isProjectExpanded && hasActiveProjectContext && (
-            <div className="ml-9 mt-2 space-y-0.5 border-l border-border hover:border-border/80 transition-colors">
-              <div className="mb-2 pl-3">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-none">Available Teams</span>
-              </div>
-              {teams.filter(t => t.name !== 'Initial Team').length > 0 ? (
-                teams
-                  .filter((t) => t.name !== 'Initial Team')
-                  .map((team) => (
-                  <button
-                    key={team.id}
-                    onClick={() => navigate(`/projects/${activeProjectId}/teams/${team.id}/board`)}
-                    className={cn(
-                      'flex w-full items-center gap-2 rounded-r-md py-1.5 pl-3 pr-2 text-xs transition-colors border-l-2',
-                      teamId === team.id 
-                        ? 'bg-primary/10 text-primary border-primary font-semibold' 
-                        : 'text-muted-foreground hover:bg-accent hover:text-foreground border-transparent hover:border-muted-foreground/30'
-                    )}
-                  >
-                    <span className="truncate">{team.name}</span>
-                  </button>
-                ))
-              ) : (
-                <div className="py-2 pl-3">
-                  <span className="text-[10px] italic text-muted-foreground">No teams found</span>
+            teamsLoading ? (
+              <SidebarTeamsSkeleton />
+            ) : (
+              <div className="ml-9 mt-2 space-y-0.5 border-l border-border hover:border-border/80 transition-colors">
+                <div className="mb-2 pl-3">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest leading-none">Available Teams</span>
                 </div>
-              )}
-            </div>
+                {teams.filter(t => t.name !== 'Initial Team').length > 0 ? (
+                  teams
+                    .filter((t) => t.name !== 'Initial Team')
+                    .map((team) => (
+                    <button
+                      key={team.id}
+                      onClick={() => navigate(`/projects/${activeProjectId}/teams/${team.id}/board`)}
+                      className={cn(
+                        'flex w-full items-center gap-2 rounded-r-md py-1.5 pl-3 pr-2 text-xs transition-colors border-l-2',
+                        teamId === team.id 
+                          ? 'bg-primary/10 text-primary border-primary font-semibold' 
+                          : 'text-muted-foreground hover:bg-accent hover:text-foreground border-transparent hover:border-muted-foreground/30'
+                      )}
+                    >
+                      <span className="truncate">{team.name}</span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="py-2 pl-3">
+                    <span className="text-[10px] italic text-muted-foreground">No teams found</span>
+                  </div>
+                )}
+              </div>
+            )
           )}
         </div>
 
