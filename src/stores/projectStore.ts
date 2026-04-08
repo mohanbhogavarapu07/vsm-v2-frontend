@@ -78,6 +78,9 @@ interface ProjectState {
   workflowStages: WorkflowStage[];
   permissions: string[];
   loading: boolean;
+  teamsLoading: boolean;
+  rolesLoading: boolean;
+  membersLoading: boolean;
   error: string | null;
 
   // Setup wizard
@@ -94,6 +97,7 @@ interface ProjectState {
 
   // Teams
   fetchTeams: (projectId: string) => Promise<void>;
+  ensureDefaultTeam: (projectId: string) => Promise<string | null>;
   createTeam: (projectId: string, data: { name: string }) => Promise<Team>;
   updateTeamName: (teamId: string, name: string) => Promise<void>;
   deleteTeam: (projectId: string, teamId: string) => Promise<void>;
@@ -163,6 +167,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   workflowStages: [],
   permissions: [],
   loading: false,
+  teamsLoading: false,
+  rolesLoading: false,
+  membersLoading: false,
   error: null,
   setupStep: 'roles',
 
@@ -232,15 +239,37 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   fetchTeams: async (projectId: string) => {
-    set({ loading: true, error: null });
+    set({ teamsLoading: true, error: null });
     try {
       const data = await api.listTeams(projectId);
       set({
         teams: data.map((t: any) => ({ ...t, id: String(t.id), projectId: String(t.projectId) })),
-        loading: false,
+        teamsLoading: false,
       });
     } catch (e: any) {
-      set({ error: e.message, loading: false });
+      set({ error: e.message, teamsLoading: false });
+    }
+  },
+
+  ensureDefaultTeam: async (projectId: string) => {
+    const { teams, currentTeamId } = get();
+    if (currentTeamId) return currentTeamId;
+    if (teams.length > 0) {
+      const teamId = teams[0].id;
+      set({ currentTeamId: teamId });
+      return teamId;
+    }
+    try {
+      const data = await api.listTeams(projectId);
+      const mapped = data.map((t: any) => ({ ...t, id: String(t.id), projectId: String(t.projectId) }));
+      set({ teams: mapped });
+      if (mapped.length > 0) {
+        set({ currentTeamId: mapped[0].id });
+        return mapped[0].id;
+      }
+      return null;
+    } catch {
+      return null;
     }
   },
 
@@ -283,7 +312,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   },
 
   fetchRoles: async (projectId) => {
-    set({ loading: true, error: null });
+    set({ rolesLoading: true, error: null });
     try {
       const data = await api.listRoles(projectId);
       set({
@@ -295,10 +324,10 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
           access_level: inferAccessLevel(r.permission_codes || []),
           created_at: r.createdAt,
         })),
-        loading: false,
+        rolesLoading: false,
       });
     } catch (e: any) {
-      set({ error: e.message, loading: false });
+      set({ error: e.message, rolesLoading: false });
     }
   },
 
