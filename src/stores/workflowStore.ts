@@ -182,10 +182,16 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
 
   // Kanban Implementations
   setTeamId: (teamId) => {
+    const current = get().currentTeamId;
+    if (current === teamId) return; // Prevent unnecessary state reset
     set({ currentTeamId: teamId, tasks: [], sprints: [], aiDecisions: [] });
   },
 
   fetchWorkflows: async (projectId) => {
+    if (get().statuses.length > 0 && !get().error) {
+      // Already have data, skip redundant fetch
+      return;
+    }
     set({ loading: true, error: null });
     try {
       const data = await api.listStatuses(projectId);
