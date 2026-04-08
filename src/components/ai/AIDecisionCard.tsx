@@ -31,7 +31,7 @@ export function AIDecisionCard({ decision, onAction }: AIDecisionCardProps) {
     setActing(true);
     try {
       if (!currentTeamId) throw new Error('No team selected');
-      await api.approveDecision(String(decision.taskId), decision.id, currentTeamId);
+      await api.approveDecision(String(decision.taskId), String(decision.id), currentTeamId);
       onAction?.();
     } catch {
     } finally {
@@ -43,7 +43,7 @@ export function AIDecisionCard({ decision, onAction }: AIDecisionCardProps) {
     setActing(true);
     try {
       if (!currentTeamId) throw new Error('No team selected');
-      await api.rejectDecision(String(decision.taskId), decision.id, currentTeamId);
+      await api.rejectDecision(String(decision.taskId), String(decision.id), currentTeamId);
       onAction?.();
     } catch {
     } finally {
