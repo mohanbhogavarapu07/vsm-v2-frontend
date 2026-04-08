@@ -239,6 +239,35 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     }
   },
 
+  setIsTaskEditMode: (mode) => set({ isTaskEditMode: mode }),
+
+  updateTaskPriority: async (taskId, priority) => {
+    const teamId = get().currentTeamId;
+    if (!teamId) return;
+    try {
+      await api.updateTask(taskId, teamId, { priority });
+      set((state) => ({
+        tasks: state.tasks.map((t) => (String(t.id) === String(taskId) ? { ...t, priority } : t)),
+      }));
+    } catch (e: any) {
+      toast.error('Failed to update priority', { description: e.message });
+    }
+  },
+
+  updateTaskAssignee: async (taskId, assigneeId) => {
+    const teamId = get().currentTeamId;
+    if (!teamId) return;
+    try {
+      const numId = assigneeId ? Number(assigneeId) : null;
+      await api.updateTask(taskId, teamId, { assignee_id: numId });
+      set((state) => ({
+        tasks: state.tasks.map((t) => (String(t.id) === String(taskId) ? { ...t, assignee_id: numId } : t)),
+      }));
+    } catch (e: any) {
+      toast.error('Failed to update assignee', { description: e.message });
+    }
+  },
+
   setSelectedTask: (taskId) => set({ selectedTaskId: taskId }),
 
   updateTaskStatus: async (taskId, newStatusId) => {

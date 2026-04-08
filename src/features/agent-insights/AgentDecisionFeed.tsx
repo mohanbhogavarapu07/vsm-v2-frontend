@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { useWorkflowStore, AgentDecision } from '@/stores/workflowStore';
+import { useWorkflowStore, AIDecision as AgentDecision } from '@/stores/workflowStore';
 import { ArrowRight, Brain, Clock, ShieldCheck, AlertCircle, HelpCircle, UserCheck } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';

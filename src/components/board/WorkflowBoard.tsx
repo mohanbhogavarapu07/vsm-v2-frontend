@@ -109,14 +109,14 @@ export function WorkflowBoard() {
   // Tasks in the active sprint (for kanban board view)
   const activeSprintTasks = useMemo(() => {
     const sprintTasks = activeSprint
-      ? tasks.filter((t) => t.sprint_id === activeSprint.id)
+      ? tasks.filter((t) => String(t.sprint_id) === String(activeSprint.id))
       : tasks;
     if (!boardSearch.trim()) return sprintTasks;
     return sprintTasks.filter((t) => t.title.toLowerCase().includes(boardSearch.toLowerCase()));
   }, [activeSprint, tasks, boardSearch]);
 
   const incompleteTasks = (activeSprint
-    ? tasks.filter((t) => t.sprint_id === activeSprint.id)
+    ? tasks.filter((t) => String(t.sprint_id) === String(activeSprint.id))
     : tasks
   ).filter((t) => t.status_category !== 'DONE').length;
 
@@ -305,7 +305,7 @@ export function WorkflowBoard() {
     }
   };
 
-  const sortedStatuses = [...statuses].sort((a, b) => a.stage_order - b.stage_order);
+  const sortedStatuses = [...statuses].sort((a, b) => a.positionOrder - b.positionOrder);
 
   if (loading && statuses.length === 0) {
     return (
