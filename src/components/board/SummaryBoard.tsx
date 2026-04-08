@@ -445,7 +445,7 @@ export function SummaryBoard({ onNavigateToBoard }: SummaryBoardProps) {
                     <ScrollArea className="max-h-[320px] pr-2">
                       <div className="space-y-1">
                         {recentActivity.map((task, idx) => {
-                          const member = members.find((m) => m.id === task.assignee_id);
+                          const member = members.find((m) => String(m.id) === String(task.assignee_id));
                           const initials = getInitials(member?.full_name, member?.email);
                           const colorClass = member
                             ? AVATAR_COLORS[members.indexOf(member) % AVATAR_COLORS.length]
