@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DragDropContext, type DropResult } from '@hello-pangea/dnd';
+import { useRealtimeSync } from '@/hooks/useRealtimeSync';
 import { useWorkflowStore } from '@/stores/workflowStore';
 import { useProjectStore } from '@/stores/projectStore';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
@@ -88,6 +89,9 @@ export function WorkflowBoard() {
   const [isGitHubCallbackProcessing, setIsGitHubCallbackProcessing] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [linkingRepo, setLinkingRepo] = useState<number | null>(null);
+
+  // ── Real-time sync layer ──────────────────────────────────────────
+  useRealtimeSync(currentTeamId, projectId || null);
 
   const activeSprints = sprints.filter((s) => s.status === 'ACTIVE');
   const plannedSprints = sprints.filter((s) => s.status === 'PLANNED');
