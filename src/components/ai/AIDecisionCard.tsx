@@ -17,6 +17,8 @@ const statusStyles: Record<string, string> = {
   EXECUTED: 'bg-success/10 text-success border-success/20',
   APPLIED: 'bg-success/10 text-success border-success/20',
   PENDING_APPROVAL: 'bg-warning/10 text-warning border-warning/20',
+  PENDING_CONFIRMATION: 'bg-destructive/10 text-destructive border-destructive/40 border-2 font-semibold',
+  BLOCKED: 'bg-destructive/20 text-destructive border-destructive/50 border-2 font-bold animate-pulse',
   REJECTED: 'bg-destructive/10 text-destructive border-destructive/20',
 };
 
@@ -60,8 +62,8 @@ export function AIDecisionCard({ decision, onAction }: AIDecisionCardProps) {
         <div className="flex-1">
           <div className="flex items-center gap-2">
             <p className="text-sm font-medium text-foreground">{decision.reasoning}</p>
-            <Badge variant="outline" className={cn('text-[10px]', statusStyles[decision.status])}>
-              {decision.status.replace('_', ' ')}
+            <Badge variant="outline" className={cn('text-[10px]', decision.status ? statusStyles[decision.status] : '')}>
+              {(decision.status || 'UNKNOWN').replace('_', ' ')}
             </Badge>
           </div>
           {decision.taskTitle && (
@@ -102,7 +104,7 @@ export function AIDecisionCard({ decision, onAction }: AIDecisionCardProps) {
           )}
 
           {/* Approval buttons */}
-          {decision.status === 'PENDING_APPROVAL' && (
+          {['PENDING_APPROVAL', 'PENDING_CONFIRMATION'].includes(decision.status || '') && (
             <div className="mt-3 flex gap-2">
               <Button 
                 size="sm" 
