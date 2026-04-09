@@ -554,32 +554,70 @@ export function WorkflowBoard() {
         ) : currentTab === 'summary' ? (
           <SummaryBoard onNavigateToBoard={() => setCurrentTab('board')} />
         ) : currentTab === 'activity' ? (
-          <div className="h-full overflow-y-auto p-6 space-y-2 scrollbar-thin">
-            {events.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20">
-                <Activity className="mb-3 h-10 w-10 text-muted-foreground/30" />
-                <p className="text-sm text-muted-foreground">No events recorded yet.</p>
-              </div>
-            ) : (
-              events.map((event: any) => (
-                <div key={event.id} className="flex items-start gap-4 rounded-lg border border-border bg-card p-4 mx-auto max-w-4xl">
-                  <Badge variant="secondary" className="shrink-0 text-[10px] bg-primary/10 text-primary">
-                    {event.event_type}
-                  </Badge>
-                  <div className="flex-1">
-                    <p className="text-sm text-foreground">
-                      {event.metadata?.message || event.metadata?.description || event.event_type}
-                    </p>
-                    {event.task_id && (
-                      <p className="text-xs text-muted-foreground">Task #{event.task_id}</p>
-                    )}
-                  </div>
-                  <p className="shrink-0 text-xs text-muted-foreground">
-                    {new Date(event.created_at || event.timestamp).toLocaleString()}
-                  </p>
+          <div className="h-full overflow-y-auto p-6 scrollbar-thin">
+            <div className="max-w-3xl mx-auto">
+              {events.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20">
+                  <Activity className="mb-3 h-10 w-10 text-muted-foreground/30" />
+                  <p className="text-sm text-muted-foreground">No events recorded yet.</p>
+                  <p className="text-xs text-muted-foreground/60 mt-1">AI actions and team activity will appear here in real-time</p>
                 </div>
-              ))
-            )}
+              ) : (
+                <div className="relative">
+                  {/* Timeline line */}
+                  <div className="absolute left-5 top-0 bottom-0 w-px bg-border" />
+                  <div className="space-y-1">
+                    {events.map((event: any, idx: number) => {
+                      const isAI = ['AI_DECISION', 'TASK_MOVED', 'AUTO_TRANSITION', 'BLOCKER_DETECTED'].includes(event.event_type);
+                      const isGit = ['GIT_COMMIT', 'PR_CREATED', 'PR_MERGED', 'CI_STATUS'].includes(event.event_type);
+                      return (
+                        <div key={event.id || idx} className="relative flex items-start gap-4 pl-10 py-3 group">
+                          {/* Timeline dot */}
+                          <div className={cn(
+                            'absolute left-[14px] top-4 h-3 w-3 rounded-full border-2 border-background z-10 transition-transform group-hover:scale-125',
+                            isAI ? 'bg-primary shadow-[0_0_8px_hsl(var(--primary)/0.4)]' :
+                            isGit ? 'bg-success' :
+                            'bg-muted-foreground/40'
+                          )} />
+                          <div className="flex-1 rounded-lg border border-border/50 bg-card p-4 shadow-sm transition-shadow hover:shadow-md">
+                            <div className="flex items-center gap-2 mb-1.5">
+                              <Badge variant="outline" className={cn(
+                                'text-[9px] font-bold uppercase tracking-wider border-none px-2 py-0.5 rounded-full',
+                                isAI ? 'bg-primary/10 text-primary' :
+                                isGit ? 'bg-success/10 text-success' :
+                                'bg-muted text-muted-foreground'
+                              )}>
+                                {isAI ? '🤖 AI' : isGit ? '🔗 GitHub' : '👤 Manual'}
+                              </Badge>
+                              <Badge variant="secondary" className="text-[9px] bg-secondary/50 text-secondary-foreground">
+                                {event.event_type?.replace(/_/g, ' ')}
+                              </Badge>
+                              <span className="ml-auto text-[10px] text-muted-foreground/70">
+                                {formatRelativeTime(event.created_at || event.timestamp)}
+                              </span>
+                            </div>
+                            <p className="text-sm text-foreground leading-relaxed">
+                              {event.metadata?.message || event.metadata?.description || event.event_type}
+                            </p>
+                            {event.task_id && (
+                              <p className="mt-1.5 text-xs text-muted-foreground flex items-center gap-1">
+                                <span className="inline-block h-1.5 w-1.5 rounded-full bg-muted-foreground/30" />
+                                Task #{event.task_id}
+                                {event.metadata?.confidence_score && (
+                                  <span className="ml-2 text-primary">
+                                    Confidence: {Math.round(event.metadata.confidence_score * 100)}%
+                                  </span>
+                                )}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         ) : currentTab === 'decisions' ? (
           <div className="h-full overflow-y-auto p-6 scrollbar-thin max-w-4xl mx-auto">
