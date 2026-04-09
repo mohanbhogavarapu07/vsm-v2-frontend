@@ -53,12 +53,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // 2. Continuous listener for all auth events
       supabase.auth.onAuthStateChange(async (event, session) => {
         if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session) {
+          // Clean up auth tokens from URL hash
+          if (window.location.hash && window.location.hash.includes('access_token')) {
+            window.history.replaceState(null, '', window.location.pathname || '/home');
+          }
+          
           const storedBackendId = localStorage.getItem('vsm_user_id');
           if (!storedBackendId) {
-            // New user or missing context - trigger sync!
             await get().syncWithBackend(session);
           } else {
-            // Already synced, just update local state if not already done
             const email = session.user.email;
             const name = session.user.user_metadata?.full_name || session.user.email?.split('@')[0];
             set({
@@ -87,7 +90,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.href
+        redirectTo: `${window.location.origin}/home`
       }
     });
     if (error) {
