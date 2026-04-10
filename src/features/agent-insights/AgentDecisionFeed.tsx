@@ -64,12 +64,21 @@ export default function AgentDecisionFeed() {
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold text-lg">{decision.taskTitle || `Task #${decision.taskId}`}</span>
-                      <span className="text-xs text-muted-foreground font-mono">[{decision.correlationId.slice(0,8)}...]</span>
+                      <span className="font-semibold text-lg">
+                        {decision.task_title || decision.taskTitle || `Task #${decision.task_id ?? decision.taskId}`}
+                      </span>
+                      <span className="text-xs font-mono bg-muted/60 border border-border/40 rounded px-1.5 py-0.5 text-muted-foreground">
+                        #{decision.task_id ?? decision.taskId}
+                      </span>
+                      {(decision.correlationId || decision.correlation_id) && (
+                        <span className="text-xs text-muted-foreground font-mono">
+                          [{(decision.correlationId || decision.correlation_id || '').slice(0, 8)}...]
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                        <Clock className="h-3.5 w-3.5" />
-                       <span>{formatDistanceToNow(new Date(decision.createdAt), { addSuffix: true })}</span>
+                       <span>{formatDistanceToNow(new Date(decision.createdAt || decision.created_at || ''), { addSuffix: true })}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
@@ -88,11 +97,16 @@ export default function AgentDecisionFeed() {
                    </div>
                 </div>
 
-                {decision.status === 'APPLIED' && (
+                {(decision.from_stage_name || decision.fromStageName || decision.from_stage_id || decision.fromStageId ||
+                  decision.to_stage_name || decision.toStageName || decision.to_stage_id || decision.toStageId) && (
                   <div className="mt-4 flex items-center gap-3 text-sm font-medium">
-                    <span className="px-2 py-0.5 rounded bg-muted/80 text-foreground border border-border/50 text-xs uppercase">{decision.fromStageId || 'Initial'}</span>
+                    <span className="px-2 py-0.5 rounded bg-muted/80 text-foreground border border-border/50 text-xs uppercase">
+                      {decision.from_stage_name || decision.fromStageName || `Stage #${decision.from_stage_id ?? decision.fromStageId ?? '?'}`}
+                    </span>
                     <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                    <span className="px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 text-xs uppercase">{decision.toStageId}</span>
+                    <span className="px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 text-xs uppercase">
+                      {decision.to_stage_name || decision.toStageName || `Stage #${decision.to_stage_id ?? decision.toStageId ?? '?'}`}
+                    </span>
                   </div>
                 )}
 

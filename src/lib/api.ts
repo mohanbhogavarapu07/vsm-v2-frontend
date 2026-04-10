@@ -120,6 +120,8 @@ export const api = {
     apiRequest<any>(`/projects/${projectId}/workflow/transitions/${transitionId}`, { method: 'DELETE' }),
 
   // ── Tasks (team-scoped via query) ──────────────────────────────────────────
+  getTask: (taskId: string, teamId: string) =>
+    apiRequest<any>(`/tasks/${taskId}`, {}, { team_id: teamId }),
   listTasks: (teamId: string, limit = 50, offset = 0) =>
     apiRequest<any[]>('/tasks', {}, { team_id: teamId, limit, offset }),
   createTask: (teamId: string, data: { title: string; description?: string; sprint_id?: number | null; current_status_id?: number | null; assignee_id?: number | null; priority?: string }) =>
@@ -134,10 +136,17 @@ export const api = {
     apiRequest<any[]>(`/tasks/${taskId}/activity`, {}, { team_id: teamId }),
   getTaskDecisions: (taskId: string, teamId: string) =>
     apiRequest<any[]>(`/tasks/${taskId}/decisions`, {}, { team_id: teamId }),
+  getTeamDecisions: (teamId: string) =>
+    apiRequest<any[]>(`/tasks/decisions`, {}, { team_id: teamId }),
   approveDecision: (taskId: string, decisionId: string, teamId: string) =>
     apiRequest<any>(`/tasks/${taskId}/decisions/${decisionId}/approve`, { method: 'POST' }, { team_id: teamId }),
   rejectDecision: (taskId: string, decisionId: string, teamId: string) =>
     apiRequest<any>(`/tasks/${taskId}/decisions/${decisionId}/reject`, { method: 'POST' }, { team_id: teamId }),
+  resolveDecision: (taskId: string, decisionId: string, teamId: string, newStatusId: number) =>
+    apiRequest<any>(`/tasks/${taskId}/decisions/${decisionId}/resolve`, { 
+      method: 'POST', 
+      body: JSON.stringify({ new_status_id: newStatusId }) 
+    }, { team_id: teamId }),
 
   // ── Sprints (team-scoped) ──────────────────────────────────────────────────
   listSprints: (teamId: string) =>
@@ -174,6 +183,10 @@ export const api = {
     apiRequest<any[]>(`/teams/${teamId}/notifications`),
   markNotificationRead: (teamId: string, notificationId: string) =>
     apiRequest<any>(`/teams/${teamId}/notifications/${notificationId}/read`, { method: 'POST' }),
+  getBlockers: (teamId: string) =>
+    apiRequest<any[]>(`/teams/blockers`, {}, { team_id: teamId }),
+  resolveBlocker: (teamId: string, blockerId: string) =>
+    apiRequest<any>(`/teams/blockers/${blockerId}/resolve`, { method: 'POST' }, { team_id: teamId }),
   sendChatMessage: (message: string, teamId: string) =>
     apiRequest<any>('/webhooks/chat', {
       method: 'POST',

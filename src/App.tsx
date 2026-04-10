@@ -9,7 +9,6 @@ import { LoginPage } from '@/components/auth/LoginPage';
 import { AppLayout } from '@/components/layout/AppLayout';
 import Index from './pages/Index';
 import ActivityPage from './pages/ActivityPage';
-import DecisionsPage from './pages/DecisionsPage';
 import SettingsPage from './pages/SettingsPage';
 import ProjectsPage from './pages/ProjectsPage';
 import ProjectSetupPage from './pages/ProjectSetupPage';

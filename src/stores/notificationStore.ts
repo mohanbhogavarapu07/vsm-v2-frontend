@@ -3,12 +3,13 @@ import { api } from '@/lib/api';
 
 export interface Notification {
   id: string;
-  type: 'ai_decision' | 'blocker' | 'task_update' | 'system';
+  type: 'ai_decision' | 'blocker' | 'task_update' | 'system' | 'UNLINKED_CONTRIBUTION';
   title: string;
   message: string;
   taskId?: number | string;
   severity: 'info' | 'warning' | 'critical';
   read: boolean;
+  isBlocker?: boolean;
   createdAt: string;
 }
 
@@ -22,6 +23,7 @@ interface NotificationState {
   markAllRead: () => void;
   clearAll: () => void;
   fetchNotifications: (teamId: string) => Promise<void>;
+  resolveBlocker: (teamId: string, blockerId: string) => Promise<void>;
 }
 
 export const useNotificationStore = create<NotificationState>((set, get) => ({
@@ -63,18 +65,57 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   
   fetchNotifications: async (teamId) => {
     try {
-      const data = await api.getNotifications(teamId);
-      const mapped = data.map((n: any) => ({
+      const [notifsData, blockersData] = await Promise.all([
+        api.getNotifications(teamId),
+        api.getBlockers(teamId)
+      ]);
+
+      const blockersMapped = blockersData.map((b: any) => ({
+        id: String(b.id),
+        type: b.type,
+        title: b.title,
+        message: b.description,
+        taskId: b.taskId,
+        severity: 'critical',
+        read: false, // Blockers are unhandled if in this list
+        isBlocker: true,
+        createdAt: b.createdAt
+      }));
+
+      const notifsMapped = notifsData.map((n: any) => ({
         id: String(n.id),
-        type: n.type === 'FLAG_SCOPE_CREEP' || n.type === 'FLAG_ASSIGNEE_MISMATCH' || n.type === 'BLOCK' ? 'blocker' : 'system',
+        type: 'system',
         title: n.title,
         message: n.message,
         taskId: n.taskId,
-        severity: n.type === 'BLOCK' ? 'critical' : n.type.includes('FLAG') ? 'warning' : 'info',
+        severity: 'info',
         read: n.isRead,
+        isBlocker: false,
         createdAt: n.createdAt
       }));
-      set({ notifications: mapped, unreadCount: mapped.filter((n: any) => !n.read).length });
-    } catch {}
+
+      const merged = [...blockersMapped, ...notifsMapped].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+
+      set({ 
+        notifications: merged, 
+        unreadCount: merged.filter((n: any) => !n.read && !n.isBlocker).length + blockersMapped.length 
+      });
+    } catch (err) {
+      console.error('Failed to fetch notifications/blockers', err);
+    }
+  },
+
+  resolveBlocker: async (teamId, blockerId) => {
+    try {
+      await api.resolveBlocker(teamId, blockerId);
+      set((state) => ({
+        notifications: state.notifications.filter(n => n.id !== blockerId),
+        unreadCount: Math.max(0, state.unreadCount - 1)
+      }));
+    } catch (err) {
+      console.error('Failed to resolve blocker', err);
+    }
   }
 }));

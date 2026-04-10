@@ -34,16 +34,30 @@ export interface WorkflowTransition {
 export interface AIDecision {
   id: number;
   taskId: number;
+  task_id?: number;
   taskTitle?: string;
+  task_title?: string;
   fromStageId?: number;
+  from_stage_id?: number;
+  fromStageName?: string;
+  from_stage_name?: string;
   toStageId?: number;
+  to_stage_id?: number;
+  toStageName?: string;
+  to_stage_name?: string;
   transitionId?: number;
   confidenceScore: number;
+  confidence_score?: number;
   reasoning: string;
-  correlationId: string;
-  status: 'APPLIED' | 'BLOCKED' | 'NO_TRANSITION' | 'FUZZY_LINK' | 'PENDING_CONFIRMATION' | 'PENDING_APPROVAL';
+  correlationId?: string;
+  correlation_id?: string;
+  status: 'APPLIED' | 'BLOCKED' | 'NO_TRANSITION' | 'FUZZY_LINK' | 'PENDING_CONFIRMATION' | 'PENDING_APPROVAL' | 'RESOLVED_MANUALLY';
+  decisionSource?: string;
+  decision_source?: string;
   triggeredByEvent?: string;
+  triggered_by_event?: string;
   createdAt: string;
+  created_at?: string;
 }
 
 export interface Task {
@@ -237,7 +251,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     const teamId = get().currentTeamId;
     if (!teamId) return;
     try {
-      const data = await api.getEventLog(teamId);
+      const data = await api.getTeamDecisions(teamId);
       set({ aiDecisions: data as any });
     } catch (e: any) {
       console.error('Failed to fetch AI decisions', e);

@@ -32,6 +32,7 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
   const { tasks, updateTaskAssignee, updateTaskDetails, isTaskEditMode, setIsTaskEditMode } = useWorkflowStore();
   const task = tasks.find((t) => t.id === taskId);
   const [activities, setActivities] = useState<any[]>([]);
+  const [aiDecisions, setAiDecisions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [editTitle, setEditTitle] = useState('');
@@ -78,12 +79,29 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
     const load = async () => {
       setLoading(true);
       try {
-        if (!projectId) return setActivities([]);
+        if (!projectId) return;
         const teamId = currentTeamId || (await ensureDefaultTeam(projectId));
-        const data = await api.getTaskActivity(taskId, teamId);
-        setActivities(data || []);
+        
+        // Fetch dev activity and AI decisions in parallel
+        const [activityData, decisionsData] = await Promise.all([
+          api.getTaskActivity(taskId, teamId).catch(() => []),
+          api.getTaskDecisions(taskId, teamId).catch(() => [])
+        ]);
+        
+        // Filter dev activity: only standard Dev updates, hide backend system status changes if wanted
+        const devLogs = activityData.filter((a: any) => 
+           a.activity_type === 'COMMIT' || 
+           a.activity_type === 'PR' || 
+           a.activity_type === 'CI' ||
+           // Also allow status changes done by humans
+           (a.activity_type === 'STATUS_CHANGE' && !a.metadata?.ai_decision_id)
+        );
+        
+        setActivities(devLogs);
+        setAiDecisions(decisionsData);
       } catch {
         setActivities([]);
+        setAiDecisions([]);
       } finally {
         setLoading(false);
       }
@@ -236,9 +254,13 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
                       ? <CheckCircle2 className="mt-0.5 h-4 w-4 text-success" />
                       : <XCircle className="mt-0.5 h-4 w-4 text-destructive" />
                   )}
-                  <div className="flex-1">
-                    <p className="text-sm text-foreground">{a.metadata?.message || a.reference_id}</p>
-                    <p className="text-xs text-muted-foreground">
+                  {a.activity_type === 'STATUS_CHANGE' && <CheckCircle2 className="mt-0.5 h-4 w-4 text-primary" />}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-foreground break-words">{a.metadata?.message || a.reference_id}</p>
+                    {a.metadata?.author && (
+                      <p className="text-[10px] text-muted-foreground mt-0.5 font-medium">By: {typeof a.metadata.author === 'object' ? (a.metadata.author.name || a.metadata.author.username || a.metadata.author.email) : a.metadata.author}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-0.5">
                       {new Date(a.created_at).toLocaleString()}
                     </p>
                   </div>
@@ -247,51 +269,63 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
             )}
           </TabsContent>
 
-          <TabsContent value="ai" className="space-y-3">
-            {task.ai_signals && task.ai_signals.length > 0 ? (
-              <div className="space-y-3">
-                <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
-                  <div className="mb-2 flex items-center gap-2">
-                    <Bot className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-semibold text-foreground">AI Analysis</span>
-                  </div>
-                  <div className="space-y-2">
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground">Signals Detected</p>
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {task.ai_signals.map((s) => (
-                          <Badge key={s} variant="outline" className="text-xs">{s}</Badge>
-                        ))}
-                      </div>
-                    </div>
-                    {task.ai_confidence != null && (
-                      <div>
-                        <p className="text-xs font-medium text-muted-foreground">Confidence</p>
-                        <div className="mt-1 flex items-center gap-2">
-                          <div className="h-2 flex-1 rounded-full bg-border">
-                            <div
-                              className={cn(
-                                'h-2 rounded-full',
-                                task.ai_confidence > 0.85
-                                  ? 'bg-success'
-                                  : task.ai_confidence > 0.6
-                                  ? 'bg-warning'
-                                  : 'bg-destructive'
-                              )}
-                              style={{ width: `${task.ai_confidence * 100}%` }}
-                            />
-                          </div>
-                          <span className="text-sm font-semibold">
-                            {Math.round(task.ai_confidence * 100)}%
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
+          <TabsContent value="ai" className="space-y-4">
+            {aiDecisions.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
+                <Bot className="mb-2 h-8 w-8 text-muted-foreground/30" />
+                <p className="text-sm">No AI decision tracking logs found.</p>
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">No AI insights for this task yet.</p>
+              <div className="space-y-4">
+                {aiDecisions.map((decision) => (
+                  <div key={decision.id} className="relative rounded-lg border border-border bg-card p-4 shadow-sm">
+                    <div className="absolute top-4 right-4 flex flex-col items-end">
+                       <Badge variant="outline" className={cn(
+                        "text-[10px] uppercase font-semibold",
+                        decision.status === 'APPLIED' || decision.status === 'EXECUTED' ? 'bg-success/10 text-success border-success/20' :
+                        decision.status === 'BLOCKED' ? 'bg-destructive/10 text-destructive border-destructive/20 cursor-help' : ''
+                       )}>
+                         {decision.status?.replace('_', ' ')}
+                       </Badge>
+                       <span className="text-[10px] text-muted-foreground mt-1">
+                         {new Date(decision.createdAt).toLocaleString()}
+                       </span>
+                    </div>
+
+                    <div className="pr-20">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Bot className="h-4 w-4 text-primary" />
+                        <span className="text-sm font-semibold">AI Assistant Decision</span>
+                      </div>
+                      
+                      <div className="space-y-2 mt-3">
+                        <div>
+                          <p className="text-xs font-semibold text-muted-foreground uppercase">Reasoning Process</p>
+                          <p className="text-sm mt-1">{decision.reasoning}</p>
+                        </div>
+                        
+                        {decision.confidenceScore != null && (
+                          <div className="mt-4 pt-3 border-t border-border">
+                            <p className="text-xs font-medium text-muted-foreground mb-1 flex justify-between">
+                              <span>Action Certainty</span>
+                              <span>{Math.round(decision.confidenceScore * 100)}%</span>
+                            </p>
+                            <div className="h-1.5 w-full rounded-full bg-border overflow-hidden">
+                              <div
+                                className={cn(
+                                  'h-full rounded-full',
+                                  decision.confidenceScore > 0.85 ? 'bg-success' : decision.confidenceScore > 0.6 ? 'bg-warning' : 'bg-destructive'
+                                )}
+                                style={{ width: `${decision.confidenceScore * 100}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </TabsContent>
         </Tabs>

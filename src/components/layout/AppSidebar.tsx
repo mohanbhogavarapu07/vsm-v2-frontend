@@ -15,6 +15,7 @@ import {
   Zap,
   ChevronDown,
   Hammer,
+  Bot
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
