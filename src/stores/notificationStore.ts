@@ -3,7 +3,7 @@ import { api } from '@/lib/api';
 
 export interface Notification {
   id: string;
-  type: 'ai_decision' | 'blocker' | 'task_update' | 'system' | 'UNLINKED_CONTRIBUTION';
+  type: 'ai_decision' | 'blocker' | 'task_update' | 'system' | 'UNLINKED_CONTRIBUTION' | 'task_added' | 'sprint_start' | 'task_done';
   title: string;
   message: string;
   taskId?: number | string;
@@ -76,7 +76,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
         title: b.title,
         message: b.description,
         taskId: b.taskId,
-        severity: 'critical',
+        severity: 'critical' as const,
         read: false, // Blockers are unhandled if in this list
         isBlocker: true,
         createdAt: b.createdAt
@@ -84,11 +84,11 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
 
       const notifsMapped = notifsData.map((n: any) => ({
         id: String(n.id),
-        type: 'system',
+        type: 'system' as const,
         title: n.title,
         message: n.message,
         taskId: n.taskId,
-        severity: 'info',
+        severity: 'info' as const,
         read: n.isRead,
         isBlocker: false,
         createdAt: n.createdAt

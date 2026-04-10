@@ -6,7 +6,7 @@ import { StageCard } from './StageCard';
 import { AddStageForm } from './AddStageForm';
 import { WorkflowReadinessGuard } from './WorkflowReadinessGuard';
 import { Button } from '@/components/ui/button';
-import { Plus, ArrowRight } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 
@@ -20,7 +20,7 @@ export default function WorkflowBuilderPage() {
   });
 
   if (isLoading) return <div className="p-8">Loading workflow...</div>;
-  if (error || !graph) return <div className="p-8 text-red-500">Failed to load workflow graph</div>;
+  if (error || !graph) return <div className="p-8 text-destructive">Failed to load workflow graph</div>;
 
   const maxOrder = graph.stages.reduce((max: number, s: any) => Math.max(max, s.positionOrder), 0);
 
@@ -53,7 +53,7 @@ export default function WorkflowBuilderPage() {
                 </div>
               )}
               <div className="space-y-1">
-                {[...graph.stages].sort((a,b) => a.positionOrder - b.positionOrder).map(stage => (
+                {[...graph.stages].sort((a: any, b: any) => a.positionOrder - b.positionOrder).map((stage: any) => (
                   <StageCard key={stage.id} projectId={projectId!} stage={stage} />
                 ))}
                 {graph.stages.length === 0 && !showAddStage && (
@@ -63,19 +63,18 @@ export default function WorkflowBuilderPage() {
             </CardContent>
           </Card>
 
-
-
-        {/* Debug/Readiness Wrapper Example Display */}
-        <div className="mt-12">
-          <WorkflowReadinessGuard readiness={graph.readiness}>
-            <div className="p-4 border border-green-200 bg-green-50 rounded-xl shadow-sm dark:border-green-900/50 dark:bg-green-900/10 transition-all">
+          {/* Debug/Readiness Wrapper */}
+          <div className="mt-12">
+            <WorkflowReadinessGuard readiness={graph.readiness}>
+              <div className="p-4 border border-green-200 bg-green-50 rounded-xl shadow-sm dark:border-green-900/50 dark:bg-green-900/10 transition-all">
                 <h3 className="font-semibold text-green-800 dark:text-green-400 flex items-center gap-2">
                   <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></span>
                   AI Automation Check Passed
                 </h3>
                 <p className="text-sm text-green-700/80 mt-2 dark:text-green-500/80">The agent logic engine confirms the workflow graph qualifies as <strong>ACTIVE</strong>. Automatic state traversal rules are bound securely to the Celery tasks and are proactively monitoring Webhook inputs.</p>
-            </div>
-          </WorkflowReadinessGuard>
+              </div>
+            </WorkflowReadinessGuard>
+          </div>
         </div>
       </div>
     </div>
