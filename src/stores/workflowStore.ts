@@ -51,7 +51,7 @@ export interface AIDecision {
   reasoning: string;
   correlationId?: string;
   correlation_id?: string;
-  status: 'APPLIED' | 'BLOCKED' | 'NO_TRANSITION' | 'FUZZY_LINK' | 'PENDING_CONFIRMATION' | 'PENDING_APPROVAL' | 'RESOLVED_MANUALLY';
+  status: 'APPLIED' | 'EXECUTED' | 'BLOCKED' | 'NO_TRANSITION' | 'FUZZY_LINK' | 'PENDING_CONFIRMATION' | 'PENDING_APPROVAL' | 'RESOLVED_MANUALLY' | 'REJECTED';
   decisionSource?: string;
   decision_source?: string;
   triggeredByEvent?: string;

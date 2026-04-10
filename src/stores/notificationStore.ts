@@ -3,7 +3,7 @@ import { api } from '@/lib/api';
 
 export interface Notification {
   id: string;
-  type: 'ai_decision' | 'blocker' | 'task_update' | 'system' | 'UNLINKED_CONTRIBUTION';
+  type: 'ai_decision' | 'blocker' | 'task_update' | 'system' | 'UNLINKED_CONTRIBUTION' | 'task_added' | 'sprint_start' | 'task_done';
   title: string;
   message: string;
   taskId?: number | string;
