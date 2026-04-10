@@ -76,7 +76,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
         title: b.title,
         message: b.description,
         taskId: b.taskId,
-        severity: 'critical',
+        severity: 'critical' as const,
         read: false, // Blockers are unhandled if in this list
         isBlocker: true,
         createdAt: b.createdAt
