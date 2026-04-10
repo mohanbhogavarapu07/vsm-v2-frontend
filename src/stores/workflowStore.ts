@@ -279,10 +279,12 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   updateTaskStatus: async (taskId, newStatusId) => {
     const teamId = get().currentTeamId;
     if (!teamId) return;
-    try {
-      await api.manualTransition(taskId, teamId, { new_status_id: Number(newStatusId) });
-      const newStage = get().stages.find(s => s.id === Number(newStatusId));
-      const tasks = get().tasks.map(t => 
+    
+    const previousTasks = get().tasks;
+    const newStage = get().stages.find(s => s.id === Number(newStatusId));
+    
+    set({
+      tasks: previousTasks.map(t => 
         String(t.id) === String(taskId) ? { 
           ...t, 
           status_id: Number(newStatusId),
@@ -290,10 +292,13 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
           status_name: newStage?.name || t.status_name,
           status_category: newStage?.systemCategory || t.status_category
         } : t
-      );
-      set({ tasks });
-      toast.success('Task status updated');
+      )
+    });
+
+    try {
+      await api.manualTransition(taskId, teamId, { new_status_id: Number(newStatusId) });
     } catch (e: any) {
+      set({ tasks: previousTasks });
       toast.error('Failed to update status', { description: e.message });
     }
   },
@@ -405,33 +410,41 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   updateTaskOrder: async (taskId, sprintId, order) => {
     const teamId = get().currentTeamId;
     if (!teamId) return;
+    
+    const previousTasks = get().tasks;
+    const sid = sprintId === null ? null : Number(sprintId);
+    
+    set({
+      tasks: previousTasks.map((t) => (String(t.id) === String(taskId) ? { ...t, sprint_id: sid, order } : t))
+    });
+
     try {
-      const sid = sprintId === null ? null : Number(sprintId);
       await api.updateTask(taskId, teamId, { sprint_id: sid, order });
-      set((state) => ({
-        tasks: state.tasks.map((t) => (String(t.id) === String(taskId) ? { ...t, sprint_id: sid, order } : t)),
-      }));
     } catch (e: any) {
+      set({ tasks: previousTasks });
       toast.error('Failed to update task order', { description: e.message });
-      // Revert local state if needed (refetch)
-      await get().fetchTasks();
     }
   },
 
   updateTaskSprint: async (taskId, sprintId) => {
     const teamId = get().currentTeamId;
     if (!teamId) return;
+    
+    const previousTasks = get().tasks;
+    const sid = sprintId === null ? null : Number(sprintId);
+    
+    set({
+      tasks: previousTasks.map((t) => (String(t.id) === String(taskId) ? { ...t, sprint_id: sid } : t))
+    });
+
     try {
       if (sprintId === null) {
-        await api.removeTaskFromSprint(teamId, 'any', taskId); // In existing API 'any' usually works or we use updateTask
+        await api.removeTaskFromSprint(teamId, 'any', taskId);
       } else {
         await api.assignTaskToSprint(teamId, String(sprintId), taskId);
       }
-      const sid = sprintId === null ? null : Number(sprintId);
-      set((state) => ({
-        tasks: state.tasks.map((t) => (String(t.id) === String(taskId) ? { ...t, sprint_id: sid } : t)),
-      }));
     } catch (e: any) {
+      set({ tasks: previousTasks });
       toast.error('Failed to move task', { description: e.message });
     }
   },

@@ -468,7 +468,7 @@ export function SummaryBoard({ onNavigateToBoard }: SummaryBoardProps) {
                                 </AvatarFallback>
                               </Avatar>
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm leading-snug">
+                                <div className="text-sm leading-snug">
                                   <span className="font-medium text-primary">
                                     {member?.full_name || member?.email || 'Someone'}
                                   </span>
@@ -481,7 +481,7 @@ export function SummaryBoard({ onNavigateToBoard }: SummaryBoardProps) {
                                       {statusLabel.toUpperCase()}
                                     </Badge>
                                   </span>
-                                </p>
+                                </div>
                                 <p className="text-xs text-muted-foreground truncate mt-0.5">
                                   {task.title}
                                 </p>

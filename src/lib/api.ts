@@ -170,6 +170,10 @@ export const api = {
   // ── Event feed ─────────────────────────────────────────────────────────────
   getEventLog: (teamId: string, limit = 100) =>
     apiRequest<any[]>('/tasks/events', {}, { team_id: teamId, limit }),
+  getNotifications: (teamId: string) =>
+    apiRequest<any[]>(`/teams/${teamId}/notifications`),
+  markNotificationRead: (teamId: string, notificationId: string) =>
+    apiRequest<any>(`/teams/${teamId}/notifications/${notificationId}/read`, { method: 'POST' }),
   sendChatMessage: (message: string, teamId: string) =>
     apiRequest<any>('/webhooks/chat', {
       method: 'POST',

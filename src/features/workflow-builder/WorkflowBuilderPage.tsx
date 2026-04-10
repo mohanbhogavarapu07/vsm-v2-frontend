@@ -4,7 +4,6 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchWorkflowGraph } from './workflowApi';
 import { StageCard } from './StageCard';
 import { AddStageForm } from './AddStageForm';
-import { TransitionForm } from './TransitionForm';
 import { WorkflowReadinessGuard } from './WorkflowReadinessGuard';
 import { Button } from '@/components/ui/button';
 import { Plus, ArrowRight } from 'lucide-react';
@@ -14,7 +13,6 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 export default function WorkflowBuilderPage() {
   const { projectId } = useParams<{ projectId: string }>();
   const [showAddStage, setShowAddStage] = useState(false);
-  const [showAddTransition, setShowAddTransition] = useState(false);
 
   const { data: graph, isLoading, error } = useQuery({
     queryKey: ['workflowGraph', projectId],
@@ -39,7 +37,7 @@ export default function WorkflowBuilderPage() {
           </Badge>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-8">
+        <div className="max-w-3xl mx-auto">
           {/* Stages Panel */}
           <Card className="bg-muted/10 shadow-sm border-border/50">
             <CardHeader className="flex flex-row items-center justify-between pb-2 border-b border-border/50">
@@ -65,41 +63,7 @@ export default function WorkflowBuilderPage() {
             </CardContent>
           </Card>
 
-          {/* Transitions Panel */}
-          <Card className="bg-muted/10 shadow-sm border-border/50">
-            <CardHeader className="flex flex-row items-center justify-between pb-2 border-b border-border/50">
-              <CardTitle className="text-lg">Transitions</CardTitle>
-              <Button size="sm" variant="outline" onClick={() => setShowAddTransition(true)}>
-                <Plus className="h-4 w-4 mr-1" /> Add Route
-              </Button>
-            </CardHeader>
-            <CardContent className="pt-4">
-              {showAddTransition && (
-                <div className="mb-4">
-                  <TransitionForm projectId={projectId!} stages={graph.stages} onClose={() => setShowAddTransition(false)} />
-                </div>
-              )}
-              <div className="space-y-3">
-                {graph.transitions.map((t: any) => (
-                  <div key={t.id} className="flex flex-col p-3 border border-border/50 rounded-lg bg-card shadow-sm hover:border-primary/40 transition-colors">
-                    <div className="flex items-center gap-3 font-medium text-sm">
-                        <span className="truncate max-w-[120px] rounded bg-muted/60 px-2 py-0.5 text-xs">{t.fromStageName}</span>
-                        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground" />
-                        <span className="truncate max-w-[120px] rounded bg-muted/60 px-2 py-0.5 text-xs">{t.toStageName}</span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 mt-3">
-                      <Badge variant="outline" className="text-[10px] bg-background">{t.triggerType}</Badge>
-                      {t.githubEventType && <Badge className="text-[10px] bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-none shadow-none">{t.githubEventType}</Badge>}
-                    </div>
-                  </div>
-                ))}
-                {graph.transitions.length === 0 && !showAddTransition && (
-                  <p className="text-sm text-muted-foreground py-8 text-center italic">No transitions defined.</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+
 
         {/* Debug/Readiness Wrapper Example Display */}
         <div className="mt-12">

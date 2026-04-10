@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useWorkflowStore } from '@/stores/workflowStore';
 import { useNotificationStore } from '@/stores/notificationStore';
 import { toast } from 'sonner';
+import { fetchEventSource } from '@microsoft/fetch-event-source';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 const POLL_INTERVAL = 8_000; // 8s fallback polling
@@ -18,8 +19,8 @@ interface RealtimeEvent {
  * Updates Zustand stores directly when events arrive.
  */
 export function useRealtimeSync(teamId: string | null, projectId: string | null) {
-  const sseRef = useRef<EventSource | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const abortCtrlRef = useRef<AbortController | null>(null);
   const lastPollRef = useRef<number>(0);
   const isSSEConnected = useRef(false);
 
@@ -134,54 +135,6 @@ export function useRealtimeSync(teamId: string | null, projectId: string | null)
     }
   }, []);
 
-  // Try SSE connection
-  const connectSSE = useCallback(() => {
-    if (!teamId) return;
-
-    const userId = localStorage.getItem('vsm_user_id');
-    const url = `${API_BASE}/events/stream?team_id=${teamId}${userId ? `&user_id=${userId}` : ''}`;
-
-    try {
-      const es = new EventSource(url);
-      sseRef.current = es;
-
-      es.onopen = () => {
-        isSSEConnected.current = true;
-        // Stop polling when SSE is active
-        if (pollRef.current) {
-          clearInterval(pollRef.current);
-          pollRef.current = null;
-        }
-      };
-
-      es.onmessage = (msg) => {
-        try {
-          const event: RealtimeEvent = JSON.parse(msg.data);
-          handleEvent(event);
-        } catch {
-          // ignore parse errors
-        }
-      };
-
-      es.onerror = () => {
-        isSSEConnected.current = false;
-        es.close();
-        sseRef.current = null;
-        // Fall back to polling
-        startPolling();
-        // Retry SSE after delay
-        setTimeout(() => {
-          if (!isSSEConnected.current && teamId) {
-            connectSSE();
-          }
-        }, SSE_RETRY_DELAY);
-      };
-    } catch {
-      // SSE not supported or endpoint doesn't exist — use polling
-      startPolling();
-    }
-  }, [teamId, handleEvent]);
-
   // Fallback: smart polling that diffs against current state
   const poll = useCallback(async () => {
     if (!teamId) return;
@@ -231,8 +184,75 @@ export function useRealtimeSync(teamId: string | null, projectId: string | null)
     poll();
   }, [poll]);
 
+  // Try SSE connection
+  const connectSSE = useCallback(() => {
+    if (!teamId) return;
+
+    const userId = localStorage.getItem('vsm_user_id');
+    const url = `${API_BASE}/events/stream?team_id=${teamId}${userId ? `&user_id=${userId}` : ''}`;
+
+    try {
+      const ENABLE_SSE = true;
+      if (!ENABLE_SSE) {
+        startPolling();
+        return;
+      }
+
+      if (abortCtrlRef.current) {
+        abortCtrlRef.current.abort();
+      }
+      abortCtrlRef.current = new AbortController();
+
+      fetchEventSource(url, {
+        method: 'GET',
+        headers: {
+          'ngrok-skip-browser-warning': 'true',
+          'Accept': 'text/event-stream'
+        },
+        signal: abortCtrlRef.current.signal,
+        async onopen(response) {
+          if (response.ok) {
+            isSSEConnected.current = true;
+            if (pollRef.current) {
+              clearInterval(pollRef.current);
+              pollRef.current = null;
+            }
+          }
+        },
+        onmessage(msg) {
+          try {
+            const data = JSON.parse(msg.data);
+            if (data.type === 'CONNECTED') {
+               // Initial ping
+               return;
+            }
+            handleEvent({ type: data.type, payload: data.payload });
+          } catch (e) {
+            console.error('Failed to parse SSE message:', e);
+          }
+        },
+        onclose() {
+          isSSEConnected.current = false;
+        },
+        onerror(err) {
+          isSSEConnected.current = false;
+          throw err; // throw to trigger reconnect logic in fetchEventSource
+        }
+      }).catch((err) => {
+        isSSEConnected.current = false;
+        startPolling();
+      });
+    } catch {
+      // SSE not supported or endpoint doesn't exist — use polling
+      startPolling();
+    }
+  }, [teamId, handleEvent, startPolling]);
+
   useEffect(() => {
     if (!teamId) return;
+
+    // Fetch historical notifications immediately
+    useNotificationStore.getState().fetchNotifications(teamId);
 
     // Try SSE, will fall back to polling if it fails
     connectSSE();
@@ -242,9 +262,9 @@ export function useRealtimeSync(teamId: string | null, projectId: string | null)
     }
 
     return () => {
-      if (sseRef.current) {
-        sseRef.current.close();
-        sseRef.current = null;
+      if (abortCtrlRef.current) {
+        abortCtrlRef.current.abort();
+        abortCtrlRef.current = null;
       }
       if (pollRef.current) {
         clearInterval(pollRef.current);
