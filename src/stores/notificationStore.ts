@@ -84,7 +84,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
 
       const notifsMapped = notifsData.map((n: any) => ({
         id: String(n.id),
-        type: 'system',
+        type: 'system' as const,
         title: n.title,
         message: n.message,
         taskId: n.taskId,
