@@ -88,7 +88,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
         title: n.title,
         message: n.message,
         taskId: n.taskId,
-        severity: 'info',
+        severity: 'info' as const,
         read: n.isRead,
         isBlocker: false,
         createdAt: n.createdAt
