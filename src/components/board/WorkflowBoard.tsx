@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DragDropContext, type DropResult } from '@hello-pangea/dnd';
 import { useRealtimeSync } from '@/hooks/useRealtimeSync';
@@ -300,7 +300,7 @@ export function WorkflowBoard() {
     }
   };
 
-  const handleDragEnd = (result: DropResult) => {
+  const handleDragEnd = useCallback((result: DropResult) => {
     if (!result.destination) return;
     if (!permissions.includes('UPDATE_TASK')) {
       toast.error('You do not have permission to update tasks (Read-only access)');
@@ -310,9 +310,9 @@ export function WorkflowBoard() {
     if (result.source.droppableId !== destination.droppableId) {
       updateTaskStatus(draggableId, destination.droppableId);
     }
-  };
+  }, [permissions, updateTaskStatus]);
 
-  const sortedStatuses = [...statuses].sort((a, b) => a.positionOrder - b.positionOrder);
+  const sortedStatuses = useMemo(() => [...statuses].sort((a, b) => a.positionOrder - b.positionOrder), [statuses]);
 
   if (loading && statuses.length === 0) {
     return (
@@ -510,9 +510,10 @@ export function WorkflowBoard() {
         </div>
       )}
       {/* ── Content ─────────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden relative">
+        <AnimatePresence mode="wait">
         {currentTab === 'board' ? (
-          <div className="h-full overflow-x-auto p-6 bg-transparent">
+          <motion.div key="board" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.12 }} className="h-full overflow-x-auto p-6 bg-transparent">
             {!activeSprint && sprints.length === 0 && (
               <div className="flex flex-col items-center justify-center h-[60%] gap-3 text-center">
                 <Calendar className="h-12 w-12 text-muted-foreground/40" />
@@ -540,22 +541,25 @@ export function WorkflowBoard() {
             )}
             {activeSprint && (
               <DragDropContext onDragEnd={handleDragEnd}>
-                <div className="flex gap-4" style={{ minHeight: 'calc(100vh - 200px)' }}>
-                  {sortedStatuses.map((status) => (
-                    <KanbanColumn
-                      key={status.id}
-                      status={status}
-                      tasks={activeSprintTasks.filter((t) => t.status_id === status.id)}
-                    />
-                  ))}
+                <div className="flex gap-4 items-start" style={{ minHeight: 'calc(100vh - 200px)' }}>
+                  {sortedStatuses.map((status) => {
+                    const columnTasks = activeSprintTasks.filter((t) => t.status_id === status.id);
+                    return (
+                      <KanbanColumn
+                        key={status.id}
+                        status={status}
+                        tasks={columnTasks}
+                      />
+                    );
+                  })}
                 </div>
               </DragDropContext>
             )}
-          </div>
+          </motion.div>
         ) : currentTab === 'backlog' ? (
-          <div className="h-full">
+          <motion.div key="backlog" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.12 }} className="h-full">
             <BacklogView />
-          </div>
+          </motion.div>
         ) : currentTab === 'summary' ? (
           <SummaryBoard onNavigateToBoard={() => setCurrentTab('board')} />
         ) : currentTab === 'activity' ? (
@@ -565,20 +569,51 @@ export function WorkflowBoard() {
             {(!aiDecisions || aiDecisions.length === 0) ? (
               <div className="flex flex-col items-center justify-center py-20">
                 <Bot className="mb-3 h-10 w-10 text-muted-foreground/30" />
-                <p className="text-sm text-muted-foreground">No AI decisions yet.</p>
+                <p className="text-sm font-medium text-foreground">No AI decisions yet</p>
+                <p className="text-xs text-muted-foreground mt-1 max-w-xs text-center">
+                  AI decisions will appear here as the agent processes task transitions and workflow events.
+                </p>
               </div>
             ) : (
               <div className="space-y-6">
-                <div>
-                  <h2 className="mb-3 text-sm font-semibold uppercase text-muted-foreground">Decision History</h2>
-                  <div className="space-y-3">
-                    {aiDecisions
-                      .filter(d => !['BLOCKED', 'PENDING_APPROVAL', 'PENDING_CONFIRMATION'].includes(d.status))
-                      .map((d) => (
-                        <AIDecisionCard key={d.id} decision={d} onAction={fetchAIDecisions} />
-                      ))}
-                  </div>
-                </div>
+                {/* Action Required - Blockers */}
+                {(() => {
+                  const blockers = aiDecisions.filter(d => ['BLOCKED', 'PENDING_APPROVAL', 'PENDING_CONFIRMATION'].includes(d.status));
+                  if (blockers.length === 0) return null;
+                  return (
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                        <h2 className="text-sm font-bold uppercase text-amber-600 dark:text-amber-400 tracking-wide">
+                          Action Required ({blockers.length})
+                        </h2>
+                      </div>
+                      <div className="space-y-3">
+                        {blockers.map((d) => (
+                          <AIDecisionCard key={d.id} decision={d} onAction={fetchAIDecisions} />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Decision History */}
+                {(() => {
+                  const history = aiDecisions.filter(d => !['BLOCKED', 'PENDING_APPROVAL', 'PENDING_CONFIRMATION'].includes(d.status));
+                  if (history.length === 0) return null;
+                  return (
+                    <div>
+                      <h2 className="mb-3 text-sm font-semibold uppercase text-muted-foreground tracking-wide">
+                        Decision History ({history.length})
+                      </h2>
+                      <div className="space-y-3">
+                        {history.map((d) => (
+                          <AIDecisionCard key={d.id} decision={d} onAction={fetchAIDecisions} />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>
@@ -824,6 +859,7 @@ export function WorkflowBoard() {
         )}
       </div>
     ) : null}
+        </AnimatePresence>
       </div>
 
       {/* ── Task Detail Panel ────────────────────────────────────────────── */}

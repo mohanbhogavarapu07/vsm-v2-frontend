@@ -182,4 +182,14 @@
   .shadow-soft-hover {
     box-shadow: 0 10px 30px -4px rgba(0, 0, 0, 0.08);
   }
+  
+  /* Smooth transitions for all interactive elements */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  /* Prevent layout shift during transitions */
+  .will-change-transform {
+    will-change: transform;
+  }
 }

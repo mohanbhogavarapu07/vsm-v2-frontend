@@ -1,3 +1,4 @@
+import React from 'react';
 import { type Task } from '@/stores/workflowStore';
 import { useWorkflowStore } from '@/stores/workflowStore';
 import { useProjectStore } from '@/stores/projectStore';
@@ -47,7 +48,7 @@ interface TaskCardProps {
   task: Task;
 }
 
-export function TaskCard({ task }: TaskCardProps) {
+export const TaskCard = React.memo(function TaskCard({ task }: TaskCardProps) {
   const { setSelectedTask, updateTaskPriority, updateTaskAssignee, deleteTask, sprints, setIsTaskEditMode } = useWorkflowStore();
   const members = useProjectStore((s) => s.members);
 
@@ -55,7 +56,6 @@ export function TaskCard({ task }: TaskCardProps) {
     ? sprints.find(s => s.id === String(task.sprint_id))?.name || 'Active Sprint'
     : 'Backlog';
 
-  // Derive assignee name either from task object directly or fallback to store lookup
   const matchedMember = members.find((m) => m.id === String(task.assignee_id));
   const derivedAssigneeName = matchedMember?.full_name || matchedMember?.email || task.assignee_name;
 
@@ -68,18 +68,18 @@ export function TaskCard({ task }: TaskCardProps) {
 
   return (
     <Card
-      className="cursor-pointer border-border/60 bg-card p-4 shadow-[0_2px_8px_-2px_rgba(0,0,0,0.05)] transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_8px_20px_-4px_rgba(0,0,0,0.08)] hover:border-border/80"
+      className="cursor-pointer border-border/60 bg-card p-4 shadow-[0_1px_4px_rgba(0,0,0,0.04)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_4px_12px_-2px_rgba(0,0,0,0.08)] hover:border-primary/30 will-change-transform"
       onClick={() => setSelectedTask(task.id)}
     >
-      <div className="space-y-2">
+      <div className="space-y-2.5">
         {/* Title, Priority & Menu */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0 flex flex-col gap-1.5">
             <h4 className="text-sm font-medium leading-snug text-foreground line-clamp-2 pr-2">
               {task.title}
             </h4>
-            <div className="flex items-center gap-2">
-              <p className="text-[11px] text-muted-foreground font-medium">{sprintName}</p>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] font-mono text-muted-foreground/70 uppercase">{String(task.id)}</span>
               {task.priority && priorityStyles[task.priority] && (
                 <Badge
                   variant="outline"
@@ -138,42 +138,39 @@ export function TaskCard({ task }: TaskCardProps) {
         </div>
 
         {/* Signals row */}
-        <div className="flex items-center gap-2">
-          {/* PR Status */}
-          {task.pr_status && (
-            <div className="flex items-center gap-1 text-xs text-muted-foreground">
-              <GitPullRequest className="h-3.5 w-3.5" />
-              <span className="capitalize">{task.pr_status}</span>
-            </div>
-          )}
-
-          {/* CI Status */}
-          {task.ci_status && ciIcons[task.ci_status]}
-
-          {/* AI Signals */}
-          {task.ai_signals && task.ai_signals.length > 0 && (
-            <div className="flex items-center gap-1">
-              <Bot className="h-3.5 w-3.5 text-primary" />
-              {task.ai_confidence != null && (
-                <span
-                  className={cn(
-                    'text-[10px] font-semibold',
-                    task.ai_confidence > 0.85
-                      ? 'text-success'
-                      : task.ai_confidence > 0.6
-                      ? 'text-warning'
-                      : 'text-destructive'
-                  )}
-                >
-                  {Math.round(task.ai_confidence * 100)}%
-                </span>
-              )}
-            </div>
-          )}
-        </div>
+        {(task.pr_status || task.ci_status || (task.ai_signals && task.ai_signals.length > 0)) && (
+          <div className="flex items-center gap-2">
+            {task.pr_status && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <GitPullRequest className="h-3.5 w-3.5" />
+                <span className="capitalize">{task.pr_status}</span>
+              </div>
+            )}
+            {task.ci_status && ciIcons[task.ci_status]}
+            {task.ai_signals && task.ai_signals.length > 0 && (
+              <div className="flex items-center gap-1">
+                <Bot className="h-3.5 w-3.5 text-primary" />
+                {task.ai_confidence != null && (
+                  <span
+                    className={cn(
+                      'text-[10px] font-semibold',
+                      task.ai_confidence > 0.85
+                        ? 'text-success'
+                        : task.ai_confidence > 0.6
+                        ? 'text-warning'
+                        : 'text-destructive'
+                    )}
+                  >
+                    {Math.round(task.ai_confidence * 100)}%
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Assignee */}
-        <div className="flex items-center gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between pt-1" onClick={(e) => e.stopPropagation()}>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <div className="cursor-pointer outline-none">
@@ -221,4 +218,4 @@ export function TaskCard({ task }: TaskCardProps) {
       </div>
     </Card>
   );
-}
+});

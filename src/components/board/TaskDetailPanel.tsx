@@ -274,57 +274,102 @@ export function TaskDetailPanel({ taskId, onClose }: TaskDetailPanelProps) {
               <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
                 <Bot className="mb-2 h-8 w-8 text-muted-foreground/30" />
                 <p className="text-sm">No AI decision tracking logs found.</p>
+                <p className="text-xs text-muted-foreground/60 mt-1">AI decisions will appear here as the agent processes this task.</p>
               </div>
             ) : (
               <div className="space-y-4">
-                {aiDecisions.map((decision) => (
-                  <div key={decision.id} className="relative rounded-lg border border-border bg-card p-4 shadow-sm">
-                    <div className="absolute top-4 right-4 flex flex-col items-end">
-                       <Badge variant="outline" className={cn(
-                        "text-[10px] uppercase font-semibold",
-                        decision.status === 'APPLIED' || decision.status === 'EXECUTED' ? 'bg-success/10 text-success border-success/20' :
-                        decision.status === 'BLOCKED' ? 'bg-destructive/10 text-destructive border-destructive/20 cursor-help' : ''
-                       )}>
-                         {decision.status?.replace('_', ' ')}
-                       </Badge>
-                       <span className="text-[10px] text-muted-foreground mt-1">
-                         {new Date(decision.createdAt).toLocaleString()}
-                       </span>
-                    </div>
+                {aiDecisions.map((decision: any) => {
+                  const fromStage = decision.fromStageName || decision.from_stage_name;
+                  const toStage = decision.toStageName || decision.to_stage_name;
+                  const confidence = decision.confidenceScore ?? decision.confidence_score ?? 0;
+                  const isApproved = decision.status === 'APPLIED' || decision.status === 'EXECUTED';
+                  const isRejected = decision.status === 'REJECTED';
+                  const isBlocked = ['BLOCKED', 'PENDING_APPROVAL', 'PENDING_CONFIRMATION'].includes(decision.status);
 
-                    <div className="pr-20">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Bot className="h-4 w-4 text-primary" />
-                        <span className="text-sm font-semibold">AI Assistant Decision</span>
-                      </div>
-                      
-                      <div className="space-y-2 mt-3">
-                        <div>
-                          <p className="text-xs font-semibold text-muted-foreground uppercase">Reasoning Process</p>
-                          <p className="text-sm mt-1">{decision.reasoning}</p>
-                        </div>
-                        
-                        {decision.confidenceScore != null && (
-                          <div className="mt-4 pt-3 border-t border-border">
-                            <p className="text-xs font-medium text-muted-foreground mb-1 flex justify-between">
-                              <span>Action Certainty</span>
-                              <span>{Math.round(decision.confidenceScore * 100)}%</span>
-                            </p>
-                            <div className="h-1.5 w-full rounded-full bg-border overflow-hidden">
-                              <div
-                                className={cn(
-                                  'h-full rounded-full',
-                                  decision.confidenceScore > 0.85 ? 'bg-success' : decision.confidenceScore > 0.6 ? 'bg-warning' : 'bg-destructive'
-                                )}
-                                style={{ width: `${decision.confidenceScore * 100}%` }}
-                              />
-                            </div>
+                  return (
+                    <div key={decision.id} className={cn(
+                      "relative rounded-lg border bg-card p-4 shadow-sm transition-all",
+                      isBlocked ? "border-l-4 border-l-amber-400" : "border-border"
+                    )}>
+                      {/* Header: Icon + Status + Time */}
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <div className={cn(
+                            "h-7 w-7 rounded-lg flex items-center justify-center shrink-0",
+                            isBlocked ? "bg-amber-100 text-amber-600" : "bg-primary/10 text-primary"
+                          )}>
+                            <Bot className="h-3.5 w-3.5" />
                           </div>
-                        )}
+                          <span className="text-sm font-semibold text-foreground">AI Decision</span>
+                          <span className="text-[10px] font-mono text-muted-foreground/50">#{decision.id}</span>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                          <Badge variant="outline" className={cn(
+                            "text-[10px] uppercase font-bold tracking-wider",
+                            isApproved ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-400' :
+                            isRejected ? 'bg-red-50 text-red-600 border-red-200 dark:bg-red-950/20 dark:text-red-400' :
+                            isBlocked ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-400' :
+                            'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900/30 dark:text-slate-400'
+                          )}>
+                            {isApproved ? '✓ Approved' : isRejected ? '✗ Rejected' : (decision.status?.replace(/_/g, ' ') || 'Unknown')}
+                          </Badge>
+                          <span className="text-[10px] text-muted-foreground/60">
+                            {new Date(decision.createdAt || decision.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
                       </div>
+
+                      {/* From → To Transition */}
+                      {(fromStage || toStage) && (
+                        <div className="flex items-center gap-2 mb-3 px-1">
+                          {fromStage && (
+                            <span className="inline-flex items-center text-[11px] font-medium bg-muted/60 text-muted-foreground px-2.5 py-1 rounded-md">
+                              {fromStage}
+                            </span>
+                          )}
+                          <svg className="h-4 w-4 text-primary/60 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14m-7-7 7 7-7 7"/></svg>
+                          {toStage && (
+                            <span className="inline-flex items-center text-[11px] font-medium bg-primary/10 text-primary px-2.5 py-1 rounded-md">
+                              {toStage}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Reasoning */}
+                      {decision.reasoning && (
+                        <div className="px-3 py-2.5 rounded-md bg-muted/30 border border-border/30 mb-3">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase mb-1 tracking-wide">Reasoning</p>
+                          <p className="text-sm text-foreground/80 leading-relaxed italic">&ldquo;{decision.reasoning}&rdquo;</p>
+                        </div>
+                      )}
+
+                      {/* Confidence Bar */}
+                      {confidence > 0 && (
+                        <div className="pt-2 border-t border-border/40">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Confidence</span>
+                            <span className={cn(
+                              "text-[11px] font-bold",
+                              confidence > 0.85 ? 'text-emerald-600' : confidence > 0.6 ? 'text-amber-600' : 'text-red-600'
+                            )}>
+                              {Math.round(confidence * 100)}%
+                            </span>
+                          </div>
+                          <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                            <div
+                              className={cn(
+                                'h-full rounded-full transition-all duration-500',
+                                confidence > 0.85 ? 'bg-emerald-500' : confidence > 0.6 ? 'bg-amber-500' : 'bg-red-500'
+                              )}
+                              style={{ width: `${confidence * 100}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </TabsContent>

@@ -227,4 +227,8 @@ export const api = {
     apiRequest<any>(`/users/${encodeURIComponent(email)}/profile`),
   updateUserProfile: (email: string, data: any) =>
     apiRequest<any>(`/users/${encodeURIComponent(email)}/profile`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  // ── Analytics Intelligence ────────────────────────────────────────────────
+  getAnalyticsIntelligence: (teamId: string) =>
+    apiRequest<any>('/analytics/intelligence', {}, { team_id: teamId }),
 };

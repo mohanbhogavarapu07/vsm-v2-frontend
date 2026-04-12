@@ -151,12 +151,40 @@ export function useRealtimeSync(teamId: string | null, projectId: string | null)
 
       const store = useWorkflowStore.getState();
 
-      // Diff tasks: only update if something changed
-      const currentIds = new Set(store.tasks.map(t => `${t.id}-${t.status_id}-${t.updatedAt}`));
-      const hasChanges = tasks.some((t: any) => !currentIds.has(`${t.id}-${t.status_id}-${t.updatedAt}`));
+      // Diff tasks: only update changed ones to prevent flickering
+      const currentTaskMap = new Map(store.tasks.map(t => [String(t.id), t]));
+      let needsUpdate = false;
+      const mergedTasks = [...store.tasks];
+      const existingIds = new Set(store.tasks.map(t => String(t.id)));
 
-      if (hasChanges) {
-        useWorkflowStore.setState({ tasks });
+      for (const newTask of tasks as any[]) {
+        const existing = currentTaskMap.get(String(newTask.id));
+        if (!existing) {
+          // New task not in store
+          mergedTasks.push(newTask);
+          needsUpdate = true;
+        } else if (
+          existing.status_id !== newTask.status_id ||
+          existing.updatedAt !== newTask.updatedAt ||
+          existing.sprint_id !== newTask.sprint_id ||
+          existing.assignee_id !== newTask.assignee_id ||
+          existing.priority !== newTask.priority ||
+          existing.title !== newTask.title
+        ) {
+          // Task changed - update in place
+          const idx = mergedTasks.findIndex(t => String(t.id) === String(newTask.id));
+          if (idx >= 0) mergedTasks[idx] = { ...existing, ...newTask };
+          needsUpdate = true;
+        }
+      }
+
+      // Remove tasks that were deleted on server
+      const serverIds = new Set((tasks as any[]).map(t => String(t.id)));
+      const filtered = mergedTasks.filter(t => serverIds.has(String(t.id)));
+      if (filtered.length !== mergedTasks.length) needsUpdate = true;
+
+      if (needsUpdate) {
+        useWorkflowStore.setState({ tasks: filtered });
       }
 
       // Check for new AI decisions in events

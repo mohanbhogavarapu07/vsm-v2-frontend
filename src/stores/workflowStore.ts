@@ -148,7 +148,7 @@ interface WorkflowState {
   completeSprint: (sprintId: string, rolloverSprintId?: number | string | null) => Promise<void>;
 
   // Task Management
-  createTask: (title: string, statusId?: string | number, sprintId?: string | number) => Promise<void>;
+  createTask: (title: string, statusId?: string | number, sprintId?: string | number, assigneeId?: string | number | null, priority?: string) => Promise<void>;
   deleteTask: (taskId: string) => Promise<void>;
   updateTaskOrder: (taskId: string, sprintId: string | number | null, order: number) => Promise<void>;
   updateTaskSprint: (taskId: string, sprintId: string | number | null) => Promise<void>;
@@ -390,15 +390,17 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   },
 
   // Task Management
-  createTask: async (title, statusId, sprintId) => {
+  createTask: async (title, statusId, sprintId, assigneeId, priority) => {
     const teamId = get().currentTeamId;
     if (!teamId) return;
     try {
-      const data = {
+      const data: any = {
         title,
         current_status_id: statusId ? Number(statusId) : null,
         sprint_id: sprintId ? Number(sprintId) : null
       };
+      if (assigneeId) data.assignee_id = Number(assigneeId);
+      if (priority) data.priority = priority;
       const task = await api.createTask(teamId, data);
       set((state) => ({ tasks: [...state.tasks, task] }));
       toast.success('Task created');

@@ -24,8 +24,8 @@ const iconMap: Record<string, React.ElementType> = {
 
 const severityStyles: Record<string, string> = {
   info: 'bg-primary/10 text-primary',
-  warning: 'bg-warning/20 text-warning-foreground border border-warning/50',
-  critical: 'bg-destructive/15 text-destructive border border-destructive/40',
+  warning: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 border border-amber-200 dark:border-amber-800',
+  critical: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800',
 };
 
 type FilterType = 'all' | 'blockers' | 'ai' | 'updates';
@@ -225,7 +225,8 @@ export function NotificationBell() {
                         }}
                         className={cn(
                           'flex w-full items-start gap-3.5 px-4 py-3.5 text-left transition-all hover:bg-accent/50 rounded-xl relative group',
-                          !n.read && !n.isBlocker && 'bg-primary/[0.03]'
+                          !n.read && !n.isBlocker && 'bg-primary/[0.03]',
+                          n.isBlocker && 'bg-amber-50/60 dark:bg-amber-950/10 hover:bg-amber-50 dark:hover:bg-amber-950/20 border border-amber-200/50 dark:border-amber-800/30'
                         )}
                       >
                         {!n.read && (
