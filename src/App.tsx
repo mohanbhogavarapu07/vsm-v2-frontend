@@ -6,6 +6,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { useAuthStore } from '@/stores/authStore';
 import { LoginPage } from '@/components/auth/LoginPage';
+import { RegisterPage } from '@/components/auth/RegisterPage';
 import { AppLayout } from '@/components/layout/AppLayout';
 import Index from './pages/Index';
 import ActivityPage from './pages/ActivityPage';
@@ -30,6 +31,11 @@ const queryClient = new QueryClient({
   },
 });
 
+/**
+ * AuthGate – wraps all protected routes.
+ * If the user is not authenticated it redirects to /login (preserving the intended path).
+ * While auth is initialising it shows a full-screen spinner.
+ */
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, loading, initialize } = useAuthStore();
 
@@ -46,7 +52,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) {
-    return <LoginPage />;
+    return <Navigate to="/login" replace />;
   }
 
   return <>{children}</>;
@@ -64,8 +70,13 @@ const App = () => (
         }}
       >
         <Routes>
+          {/* ── Public auth routes (no AuthGate) ─────────────────────────── */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/accept-invite/:invitationId" element={<AcceptInvitePage />} />
+
+          {/* ── Protected routes ──────────────────────────────────────────── */}
           <Route
             path="/*"
             element={
