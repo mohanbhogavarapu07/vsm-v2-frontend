@@ -576,31 +576,20 @@ export function WorkflowBoard() {
               </div>
             ) : (
               <div className="space-y-6">
-                {/* Action Required - Blockers */}
-                {(() => {
-                  const blockers = aiDecisions.filter(d => ['BLOCKED', 'PENDING_APPROVAL', 'PENDING_CONFIRMATION'].includes(d.status));
-                  if (blockers.length === 0) return null;
-                  return (
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <div className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-                        <h2 className="text-sm font-bold uppercase text-amber-600 dark:text-amber-400 tracking-wide">
-                          Action Required ({blockers.length})
-                        </h2>
-                      </div>
-                      <div className="space-y-3">
-                        {blockers.map((d) => (
-                          <AIDecisionCard key={d.id} decision={d} onAction={fetchAIDecisions} />
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })()}
+
 
                 {/* Decision History */}
                 {(() => {
                   const history = aiDecisions.filter(d => !['BLOCKED', 'PENDING_APPROVAL', 'PENDING_CONFIRMATION'].includes(d.status));
-                  if (history.length === 0) return null;
+                  if (history.length === 0) return (
+                    <div className="flex flex-col items-center justify-center py-20">
+                      <Bot className="mb-3 h-10 w-10 text-muted-foreground/30" />
+                      <p className="text-sm font-medium text-foreground">No historical decisions</p>
+                      <p className="text-xs text-muted-foreground mt-1 max-w-xs text-center">
+                        Active blockers are awaiting your review in the Notification Center. History will populate once they are resolved.
+                      </p>
+                    </div>
+                  );
                   return (
                     <div>
                       <h2 className="mb-3 text-sm font-semibold uppercase text-muted-foreground tracking-wide">

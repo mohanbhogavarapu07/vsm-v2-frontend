@@ -184,9 +184,9 @@ export const api = {
   markNotificationRead: (teamId: string, notificationId: string) =>
     apiRequest<any>(`/teams/${teamId}/notifications/${notificationId}/read`, { method: 'POST' }),
   getBlockers: (teamId: string) =>
-    apiRequest<any[]>(`/teams/blockers`, {}, { team_id: teamId }),
+    apiRequest<any[]>('/tasks/blockers', {}, { team_id: teamId }),
   resolveBlocker: (teamId: string, blockerId: string) =>
-    apiRequest<any>(`/teams/blockers/${blockerId}/resolve`, { method: 'POST' }, { team_id: teamId }),
+    apiRequest<any>(`/tasks/blockers/${blockerId}/resolve`, { method: 'POST' }, { team_id: teamId }),
   sendChatMessage: (message: string, teamId: string) =>
     apiRequest<any>('/webhooks/chat', {
       method: 'POST',

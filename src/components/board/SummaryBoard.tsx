@@ -226,7 +226,9 @@ export function SummaryBoard({ onNavigateToBoard }: SummaryBoardProps) {
   // ── Determine description for activity item ──────────────────────────────
 
   function describeActivity(task: Task): string {
+    const isNew = task.createdAt === task.updatedAt;
     if (task.status_category === 'DONE') return 'completed';
+    if (isNew) return 'created';
     if (task.status_name) return `moved to ${task.status_name}`;
     return 'updated';
   }
