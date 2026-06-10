@@ -167,4 +167,4 @@ To run the system daily for development, you will need the following processes r
 ---
 
 ## 🤝 Contributing
-For contributing guidelines, please refer to the specific repositories. We welcome pull requests across the stack to improve the AI reasoning, backend stability, or frontend user experience!
+For contributing guidelines, please refer to the specific repositories. We welcome pull 
