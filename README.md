@@ -162,7 +162,5 @@ To run the system daily for development, you will need the following processes r
 2. **Backend API:** `uvicorn app.main:app --reload` (in `vsm-v2-backend`).
 3. **Task Queue:** `celery -A app.worker.celery worker` (in `vsm-v2-backend`).
 4. **AI Engine:** The agent runner script (in `vsm-ai-agent`).
-5. **Web UI:** `npm run dev` (in `vsm-v2-frontend`).
 
----
 
