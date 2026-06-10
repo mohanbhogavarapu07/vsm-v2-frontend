@@ -166,5 +166,3 @@ To run the system daily for development, you will need the following processes r
 
 ---
 
-## 🤝 Contributing
-For contributing guidelines, please refer to the specific repositories. We welcome pull 
