@@ -132,12 +132,3 @@ npm run dev
 ## ⚙️ Environment Variables Summary
 
 You will need to configure `.env` files in each repository. Here is a general breakdown of what they require:
-
-**Backend (`vsm-v2-backend/.env`)**
-```env
-DATABASE_URL="postgresql://user:password@localhost:5432/vsm_db"
-REDIS_URL="redis://localhost:6379/0"
-GITHUB_WEBHOOK_SECRET="your_secret_here"
-```
-
-**AI Agent (`vsm-ai-agent/.env`)**
