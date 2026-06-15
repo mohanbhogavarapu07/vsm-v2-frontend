@@ -158,5 +158,3 @@ VITE_API_URL="http://localhost:8000"
 
 To run the system daily for development, you will need the following processes running simultaneously in separate terminal tabs:
 
-1. **Infrastructure:** PostgreSQL & Redis (usually running as background services).
-2. **Backend API:** `uvicorn app.main:app --reload` (in `vsm-v2-backend`).
