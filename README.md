@@ -130,3 +130,5 @@ npm run dev
 ---
 
 ## ⚙️ Environment Variables Summary
+
+You will need to configure `.env` files in each repository. Here is a general breakdown of what they require:
