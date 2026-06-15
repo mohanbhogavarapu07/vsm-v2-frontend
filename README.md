@@ -141,8 +141,3 @@ GITHUB_WEBHOOK_SECRET="your_secret_here"
 ```
 
 **AI Agent (`vsm-ai-agent/.env`)**
-```env
-DATABASE_URL="postgresql://user:password@localhost:5432/vsm_db"
-GROQ_API_KEY="your_groq_api_key"
-# Add other LLM keys as required depending on the configured provider
-```
