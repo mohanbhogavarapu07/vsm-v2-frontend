@@ -156,5 +156,3 @@ VITE_API_URL="http://localhost:8000"
 
 ## 🏃‍♂️ Daily Workflow
 
-To run the system daily for development, you will need the following processes running simultaneously in separate terminal tabs:
-
