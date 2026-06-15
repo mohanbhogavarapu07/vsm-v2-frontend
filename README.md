@@ -146,13 +146,3 @@ DATABASE_URL="postgresql://user:password@localhost:5432/vsm_db"
 GROQ_API_KEY="your_groq_api_key"
 # Add other LLM keys as required depending on the configured provider
 ```
-
-**Frontend (`vsm-v2-frontend/.env`)**
-```env
-VITE_API_URL="http://localhost:8000"
-```
-
----
-
-## 🏃‍♂️ Daily Workflow
-
