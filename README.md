@@ -124,9 +124,4 @@ cp .env.example .env
 # Ensure VITE_API_URL points to your backend (default is usually http://localhost:8000)
 
 # Start the development server
-npm run dev
-```
-
----
-
-=
+npm 
