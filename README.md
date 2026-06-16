@@ -129,4 +129,4 @@ npm run dev
 
 ---
 
-## ⚙️ Environment Variables Summary
+=
