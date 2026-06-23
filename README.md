@@ -1,5 +1,5 @@
 <<<<<<< HEAD
-# Welcome to your project
+# Welcome to your pro
 =======
 # Virtual Scrum Master (VSM) v2 🚀
 >>>>>>> 58d0914031ad16b76b03f5fb442e0b9dba84f0aa
